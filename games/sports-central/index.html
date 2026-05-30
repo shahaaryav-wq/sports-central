@@ -1072,7 +1072,7 @@
       renderDetail(league, teamName);
     }
 
-    function testEmail(league, teamName) {
+    async function testEmail(league, teamName) {
       const subscription = subscriptions.find((item) => item.league === league.id && item.team === teamName);
       if (!subscription) {
         openFollow(league, teamName);
@@ -1081,10 +1081,33 @@
       }
 
       const stats = buildStats(league, teamName);
-      const subject = encodeURIComponent(`${teamName} game alert`);
-      const body = encodeURIComponent(`Game alert for ${teamName}\n\nNext game: ${stats.nextGame}${stats.nextGameTime ? `, ${stats.nextGameTime}` : ''}\nBroadcast: ${stats.broadcast}\nReminder: ${stats.alertTime}\nSeason record: ${stats.record}\nSource: ${stats.source}\n\nSports Central local test alert`);
-      window.location.href = `mailto:${encodeURIComponent(subscription.email)}?subject=${subject}&body=${body}`;
-      showToast('Opening your email app with a test alert draft.');
+      showToast('Sending test email...');
+
+      try {
+        const emailResponse = await fetch('/api/send-test-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: subscription.email,
+            team: teamName,
+            nextGame: stats.nextGame,
+            nextGameTime: stats.nextGameTime,
+            record: stats.record,
+            source: stats.source
+          })
+        });
+        const data = await emailResponse.json();
+
+        if (!emailResponse.ok) {
+          throw new Error(data.error || data.message || 'Email failed');
+        }
+
+        showToast(`Test email sent to ${subscription.email}.`);
+      } catch (error) {
+        showToast(`Email failed: ${error.message}`);
+      }
     }
 
     function showToast(message) {
