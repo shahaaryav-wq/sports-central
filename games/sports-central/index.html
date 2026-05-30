@@ -1006,7 +1006,7 @@
         <div class="matchup">
           <h3>Followed Teams</h3>
           <div class="follow-list" id="followList"></div>
-          <p class="sub">This browser saves follows locally. Automatic scheduled emails need a backend email service.</p>
+          <p class="sub">MLB follows are saved to the server for automatic final-score emails. Other leagues stay local until live APIs are added.</p>
         </div>
       `;
 
@@ -1054,7 +1054,7 @@
       modalBackdrop.classList.remove('visible');
     }
 
-    function saveFollow(league, teamName, email) {
+    async function saveFollow(league, teamName, email) {
       const existing = subscriptions.find((item) => item.league === league.id && item.team === teamName);
       if (existing) {
         existing.email = email;
@@ -1068,7 +1068,35 @@
         });
       }
       saveSubscriptions();
-      showToast(`${teamName} alerts saved for ${email}.`);
+
+      if (league.id === 'mlb') {
+        showToast('Saving automatic email follow...');
+        try {
+          const followResponse = await fetch('/api/follow-team', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              email,
+              league: league.id,
+              leagueName: league.name,
+              team: teamName
+            })
+          });
+          const data = await followResponse.json();
+
+          if (!followResponse.ok) {
+            throw new Error(data.error || 'Follow save failed');
+          }
+          showToast(`${teamName} automatic final-score emails saved for ${email}.`);
+        } catch (error) {
+          showToast(`Local follow saved, but server follow failed: ${error.message}`);
+        }
+      } else {
+        showToast(`${teamName} local alerts saved for ${email}.`);
+      }
+
       renderDetail(league, teamName);
     }
 
