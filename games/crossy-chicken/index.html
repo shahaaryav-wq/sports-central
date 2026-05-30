@@ -1,0 +1,1118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crossy Chicken</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #1b4332;
+      color: #f8fafc;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+    }
+
+    #game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #1b4332;
+    }
+
+    .hud {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      display: grid;
+      gap: 6px;
+      user-select: none;
+      pointer-events: none;
+      text-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+
+    .stats {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .pill {
+      padding: 6px 9px;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      border-radius: 7px;
+      background: rgba(15, 23, 42, 0.35);
+      backdrop-filter: blur(6px);
+    }
+
+    .hint {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      max-width: min(320px, calc(100vw - 28px));
+      padding: 9px 11px;
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 7px;
+      background: rgba(15, 23, 42, 0.38);
+      color: rgba(248, 250, 252, 0.92);
+      font-size: 13px;
+      line-height: 1.35;
+      user-select: none;
+      pointer-events: none;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    }
+
+    @media (max-width: 560px) {
+      .title {
+        font-size: 17px;
+      }
+
+      .stats {
+        font-size: 12px;
+        gap: 6px;
+      }
+
+      .pill {
+        padding: 5px 7px;
+      }
+
+      .hint {
+        left: 14px;
+        right: auto;
+        font-size: 12px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="Crossy Chicken arcade game"></canvas>
+  <div class="hud" aria-hidden="true">
+    <div class="title">Crossy Chicken</div>
+    <div class="stats">
+      <div class="pill">Score <span id="score">0</span></div>
+      <div class="pill">Coins <span id="coins">0</span></div>
+      <div class="pill">Skin <span id="skin">Classic</span></div>
+      <div class="pill">Best <span id="best">0</span></div>
+    </div>
+  </div>
+  <div class="hint" aria-hidden="true">Arrow keys or WASD to move. Swipe on touch screens. Space restarts.</div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const coinsEl = document.getElementById('coins');
+    const skinEl = document.getElementById('skin');
+    const bestEl = document.getElementById('best');
+
+    const earlyLaneTypes = ['grass', 'road', 'road', 'grass', 'rail', 'grass', 'road', 'water', 'road'];
+    const bestKey = 'crossy-chicken-best';
+    const coinsKey = 'crossy-chicken-coins';
+    const characterKey = 'crossy-chicken-character';
+    const characterCost = 7;
+    const characters = [
+      { body: '#fff7ed', head: '#fed7aa', wing: 'rgba(251, 191, 36, 0.18)', comb: '#ef4444', beak: '#f97316', name: 'Classic', ability: 'Starter', description: 'No bonus. Cars, coins, and river planks work normally.', hitbox: 1, magnet: 1, riverGrip: 1 },
+      { body: '#dbeafe', head: '#bfdbfe', wing: 'rgba(59, 130, 246, 0.22)', comb: '#2563eb', beak: '#f59e0b', name: 'Bluebird', ability: 'Traffic shield', description: 'Cars can pass much closer before you lose.', hitbox: 0.38, magnet: 1.4, riverGrip: 1 },
+      { body: '#fce7f3', head: '#fbcfe8', wing: 'rgba(236, 72, 153, 0.2)', comb: '#db2777', beak: '#fb923c', name: 'Rose', ability: 'Big coin magnet', description: 'Pulls coins from several spaces away, even nearby lanes.', hitbox: 0.85, magnet: 6.2, riverGrip: 1 },
+      { body: '#dcfce7', head: '#bbf7d0', wing: 'rgba(34, 197, 94, 0.22)', comb: '#16a34a', beak: '#f59e0b', name: 'Mint', ability: 'River anchor', description: 'Planks barely drag you, and plank edges are very forgiving.', hitbox: 0.85, magnet: 1, riverGrip: 4.2 },
+      { body: '#fef9c3', head: '#fde68a', wing: 'rgba(234, 179, 8, 0.24)', comb: '#ca8a04', beak: '#ea580c', name: 'Sunny', ability: 'Coin sweep', description: 'Grabs coins from far away and gives some car forgiveness.', hitbox: 0.62, magnet: 4.2, riverGrip: 1 },
+      { body: '#ede9fe', head: '#ddd6fe', wing: 'rgba(124, 58, 237, 0.22)', comb: '#7c3aed', beak: '#f97316', name: 'Violet', ability: 'Safety boost', description: 'Cars and river edges are both much more forgiving.', hitbox: 0.48, magnet: 1.5, riverGrip: 3.1 },
+      { body: '#ccfbf1', head: '#99f6e4', wing: 'rgba(20, 184, 166, 0.24)', comb: '#0f766e', beak: '#f59e0b', name: 'Teal', ability: 'River master', description: 'Best river power. Planks almost stop pushing you sideways.', hitbox: 0.75, magnet: 1, riverGrip: 6.5 },
+      { body: '#fee2e2', head: '#fecaca', wing: 'rgba(239, 68, 68, 0.2)', comb: '#b91c1c', beak: '#fb923c', name: 'Ruby', ability: 'Car dodger', description: 'Best car power. You only lose on a very direct hit.', hitbox: 0.28, magnet: 1, riverGrip: 1.3 },
+      { body: '#e0f2fe', head: '#bae6fd', wing: 'rgba(14, 165, 233, 0.23)', comb: '#0284c7', beak: '#f59e0b', name: 'Sky', ability: 'Triple boost', description: 'Strong help with cars, coin pickup, and river planks.', hitbox: 0.48, magnet: 3.6, riverGrip: 3.3 },
+      { body: '#f5f5f4', head: '#e7e5e4', wing: 'rgba(120, 113, 108, 0.2)', comb: '#57534e', beak: '#ea580c', name: 'Pebble', ability: 'Steady shield', description: 'Great on rivers, and cars need to hit closer to count.', hitbox: 0.44, magnet: 1.2, riverGrip: 4.8 },
+      { body: '#ffedd5', head: '#fed7aa', wing: 'rgba(249, 115, 22, 0.22)', comb: '#ea580c', beak: '#facc15', name: 'Amber', ability: 'Super magnet', description: 'Strongest coin power. Pulls coins from far across the screen.', hitbox: 0.8, magnet: 9.5, riverGrip: 1 },
+      { body: '#e9d5ff', head: '#d8b4fe', wing: 'rgba(168, 85, 247, 0.24)', comb: '#9333ea', beak: '#fb923c', name: 'Comet', ability: 'Super all-rounder', description: 'Powerful car safety, huge coin reach, and strong river control.', hitbox: 0.36, magnet: 5.2, riverGrip: 4.2 }
+    ];
+    const state = {
+      tile: 66,
+      cols: 13,
+      rows: 15,
+      offsetX: 0,
+      offsetY: 0,
+      lanes: [],
+      cars: [],
+      logs: [],
+      coinItems: [],
+      machines: [],
+      feathers: [],
+      score: 0,
+      coins: Number(localStorage.getItem(coinsKey) || 0),
+      characterIndex: Number(localStorage.getItem(characterKey) || 0),
+      message: '',
+      messageTimer: 0,
+      topDepth: 0,
+      visualScroll: 0,
+      best: Number(localStorage.getItem(bestKey) || 0),
+      gameOver: false,
+      started: false,
+      time: 0,
+      shake: 0
+    };
+
+    const chicken = {
+      col: 6,
+      row: 13,
+      x: 0,
+      y: 0,
+      startX: 0,
+      startY: 0,
+      targetX: 0,
+      targetY: 0,
+      hop: 0,
+      glideTime: 1,
+      glideDuration: 0.26,
+      depth: 0,
+      facing: 'up'
+    };
+
+    let lastTime = performance.now();
+    let touchStart = null;
+
+    bestEl.textContent = state.best;
+    coinsEl.textContent = state.coins;
+    updateSkinHud();
+
+    function resize() {
+      const pixelRatio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(window.innerWidth * pixelRatio);
+      canvas.height = Math.floor(window.innerHeight * pixelRatio);
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+      state.tile = Math.max(42, Math.min(72, Math.floor(Math.min(window.innerWidth / 8, window.innerHeight / 11))));
+      state.cols = Math.max(9, Math.ceil(window.innerWidth / state.tile) + 2);
+      state.rows = Math.max(13, Math.ceil(window.innerHeight / state.tile) + 3);
+      state.offsetX = (window.innerWidth - state.cols * state.tile) / 2;
+      state.offsetY = window.innerHeight - (state.rows - 1) * state.tile - state.tile * 0.72;
+
+      chicken.col = Math.floor(state.cols / 2);
+      chicken.row = state.rows - 2;
+      chicken.x = colToX(chicken.col);
+      chicken.y = rowToY(chicken.row);
+      chicken.startX = chicken.x;
+      chicken.startY = chicken.y;
+      chicken.targetX = chicken.x;
+      chicken.targetY = chicken.y;
+      chicken.glideTime = 1;
+      chicken.depth = 0;
+      state.visualScroll = 0;
+      buildWorld();
+    }
+
+    function buildWorld() {
+      state.lanes = [];
+      state.cars = [];
+      state.logs = [];
+      state.coinItems = [];
+      state.machines = [];
+      state.topDepth = state.rows - 2;
+
+      for (let row = 0; row < state.rows; row++) {
+        addLane(row, state.rows - 2 - row);
+      }
+    }
+
+    function addLane(row, depth) {
+      const type = laneTypeForDepth(depth);
+      const speed = laneSpeedForDepth(depth);
+      state.lanes.push({ row, depth, type, speed });
+
+      if (type === 'road' || type === 'rail') {
+        makeTraffic(row, depth, type, speed);
+      }
+
+      if (type === 'water') {
+        makeLogs(row, depth, speed * 0.72);
+      }
+
+      makeCoin(row, depth, type);
+      makeMachine(row, depth, type);
+    }
+
+    function laneTypeForDepth(depth) {
+      if (depth <= 0) return 'grass';
+      if (depth < 18) return earlyLaneTypes[Math.abs(depth) % earlyLaneTypes.length];
+
+      const cycle = 15 + Math.min(9, Math.floor(depth / 32));
+      const phase = depth % cycle;
+      const riverLength = Math.min(3, 2 + Math.floor(depth / 46));
+      const roadLength = Math.min(5, 3 + Math.floor(depth / 38));
+
+      if (phase < riverLength) return 'water';
+      if (phase === riverLength) return 'grass';
+      if (phase < riverLength + roadLength + 1) return 'road';
+      if (phase === riverLength + roadLength + 1 && depth > 28) return 'rail';
+      if (phase < riverLength + roadLength + 4) return 'road';
+      return 'grass';
+    }
+
+    function laneSpeedForDepth(depth) {
+      const difficulty = Math.min(1.75, 1 + Math.max(0, depth - 10) * 0.014);
+      const base = 70 + (Math.abs(depth) % 5) * 28;
+      return base * difficulty * (depth % 2 === 0 ? 1 : -1);
+    }
+
+    function makeTraffic(row, depth, type, speed) {
+      const difficulty = Math.min(2, Math.floor(Math.max(0, depth - 18) / 34));
+      const count = type === 'rail' ? 2 + Math.min(1, difficulty) : 3 + (depth % 2) + Math.min(1, difficulty);
+      const gap = (state.cols * state.tile) / count;
+      const width = type === 'rail' ? state.tile * (1.8 + difficulty * 0.12) : state.tile * (1.05 + (depth % 3) * 0.25 + difficulty * 0.05);
+
+      for (let i = 0; i < count; i++) {
+        state.cars.push({
+          row,
+          depth,
+          x: state.offsetX + i * gap + ((depth * 41) % Math.floor(gap)),
+          width,
+          height: state.tile * 0.58,
+          speed: type === 'rail' ? speed * (1.85 + difficulty * 0.08) : speed,
+          type,
+          color: carColor(depth + i)
+        });
+      }
+    }
+
+    function makeLogs(row, depth, speed) {
+      const difficulty = Math.min(2, Math.floor(Math.max(0, depth - 22) / 38));
+      const count = depth > 90 ? 2 : 3;
+      const gap = (state.cols * state.tile) / count;
+
+      for (let i = 0; i < count; i++) {
+        state.logs.push({
+          row,
+          depth,
+          x: state.offsetX + i * gap + ((depth * 29) % Math.floor(gap)),
+          width: state.tile * (1.55 + ((depth + i) % 2) * 0.62 - difficulty * 0.05),
+          height: state.tile * 0.54,
+          speed: speed * (1 + difficulty * 0.08)
+        });
+      }
+    }
+
+    function makeCoin(row, depth, type) {
+      if (depth <= 2 || type === 'water') return;
+
+      const roll = seededUnit(depth * 97 + row * 31);
+      const chance = type === 'grass' ? 0.24 : 0.34;
+      if (roll > chance) return;
+
+      const col = 1 + Math.floor(seededUnit(depth * 43 + 7) * Math.max(1, state.cols - 2));
+      state.coinItems.push({
+        row,
+        depth,
+        x: colToX(col),
+        collected: false,
+        pulse: seededUnit(depth * 13)
+      });
+    }
+
+    function makeMachine(row, depth, type) {
+      if (type !== 'grass') return;
+      if (depth === 0 || (depth > 18 && depth % 24 === 0) || (depth > 35 && seededUnit(depth * 61) < 0.12)) {
+        const col = depth === 0 ? Math.max(1, Math.floor(state.cols / 2) - 3) : 1 + Math.floor(seededUnit(depth * 19) * Math.max(1, state.cols - 2));
+        state.machines.push({
+          row,
+          depth,
+          x: colToX(col),
+          wobble: seededUnit(depth + 5)
+        });
+      }
+    }
+
+    function seededUnit(seed) {
+      const value = Math.sin(seed * 12.9898) * 43758.5453;
+      return value - Math.floor(value);
+    }
+
+    function currentCharacter() {
+      return characters[state.characterIndex % characters.length];
+    }
+
+    function updateSkinHud() {
+      skinEl.textContent = currentCharacter().name;
+    }
+
+    function carColor(index) {
+      return ['#ef4444', '#f59e0b', '#38bdf8', '#a78bfa', '#22c55e'][index % 5];
+    }
+
+    function colToX(col) {
+      return state.offsetX + col * state.tile + state.tile / 2;
+    }
+
+    function xToCol(x) {
+      return Math.round((x - state.offsetX - state.tile / 2) / state.tile);
+    }
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function rowToY(row) {
+      return state.offsetY + row * state.tile + state.tile / 2;
+    }
+
+    function reset() {
+      state.score = 0;
+      state.gameOver = false;
+      state.started = false;
+      state.time = 0;
+      state.shake = 0;
+      state.feathers = [];
+      state.coinItems = [];
+      state.machines = [];
+      state.message = '';
+      state.messageTimer = 0;
+      state.topDepth = state.rows - 2;
+      state.visualScroll = 0;
+      chicken.col = Math.floor(state.cols / 2);
+      chicken.row = state.rows - 2;
+      chicken.x = colToX(chicken.col);
+      chicken.y = rowToY(chicken.row);
+      chicken.startX = chicken.x;
+      chicken.startY = chicken.y;
+      chicken.targetX = chicken.x;
+      chicken.targetY = chicken.y;
+      chicken.hop = 0;
+      chicken.glideTime = 1;
+      chicken.depth = 0;
+      chicken.facing = 'up';
+      scoreEl.textContent = state.score;
+      coinsEl.textContent = state.coins;
+      updateSkinHud();
+      buildWorld();
+    }
+
+    function move(dx, dy) {
+      if (state.gameOver) {
+        reset();
+        return;
+      }
+
+      state.started = true;
+      const currentCol = clamp(xToCol(chicken.x), 0, state.cols - 1);
+      const nextRow = chicken.row + dy;
+      const targetX = dx === 0 ? chicken.x : chicken.x + dx * state.tile;
+      const nextCol = dx === 0 ? currentCol : clamp(xToCol(targetX), 0, state.cols - 1);
+
+      if (targetX < state.offsetX + state.tile * 0.28 || targetX > state.offsetX + state.cols * state.tile - state.tile * 0.28) return;
+      if (nextRow < 0 || nextRow >= state.rows) return;
+
+      chicken.col = nextCol;
+      chicken.row = nextRow;
+      chicken.depth = state.lanes[nextRow].depth;
+      chicken.startX = chicken.x;
+      chicken.startY = chicken.y;
+      chicken.targetX = targetX;
+      chicken.targetY = rowToY(nextRow);
+      chicken.glideTime = 0;
+      chicken.hop = 1;
+
+      if (dy < 0) chicken.facing = 'up';
+      if (dy > 0) chicken.facing = 'down';
+      if (dx < 0) chicken.facing = 'left';
+      if (dx > 0) chicken.facing = 'right';
+
+      const newScore = Math.max(state.score, chicken.depth);
+      if (newScore !== state.score) {
+        state.score = newScore;
+        scoreEl.textContent = state.score;
+        updateBest();
+      }
+
+      while (chicken.row <= Math.floor(state.rows * 0.42)) {
+        scrollWorld();
+      }
+    }
+
+    function scrollWorld() {
+      state.topDepth += 1;
+
+      for (const lane of state.lanes) lane.row += 1;
+      for (const car of state.cars) car.row += 1;
+      for (const log of state.logs) log.row += 1;
+      for (const coin of state.coinItems) coin.row += 1;
+      for (const machine of state.machines) machine.row += 1;
+
+      state.lanes = state.lanes.filter((lane) => lane.row < state.rows);
+      state.cars = state.cars.filter((car) => car.row < state.rows);
+      state.logs = state.logs.filter((log) => log.row < state.rows);
+      state.coinItems = state.coinItems.filter((coin) => coin.row < state.rows && !coin.collected);
+      state.machines = state.machines.filter((machine) => machine.row < state.rows);
+
+      addLane(0, state.topDepth);
+      state.lanes.sort((a, b) => a.row - b.row);
+
+      chicken.row += 1;
+      chicken.startY += state.tile;
+      chicken.targetY += state.tile;
+      chicken.y += state.tile;
+      state.visualScroll -= state.tile;
+    }
+
+    function updateBest() {
+      if (state.score > state.best) {
+        state.best = state.score;
+        bestEl.textContent = state.best;
+        localStorage.setItem(bestKey, String(state.best));
+      }
+    }
+
+    function lose() {
+      if (state.gameOver) return;
+      state.gameOver = true;
+      state.shake = 0.35;
+
+      for (let i = 0; i < 18; i++) {
+        state.feathers.push({
+          x: chicken.x,
+          y: chicken.y,
+          vx: (Math.random() - 0.5) * 230,
+          vy: (Math.random() - 0.8) * 210,
+          life: 0.75 + Math.random() * 0.4,
+          size: 5 + Math.random() * 7
+        });
+      }
+    }
+
+    function update(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.033);
+      lastTime = now;
+      state.time += dt;
+      state.shake = Math.max(0, state.shake - dt);
+      state.messageTimer = Math.max(0, state.messageTimer - dt);
+
+      chicken.glideTime = Math.min(1, chicken.glideTime + dt / chicken.glideDuration);
+      const glide = easeInOutCubic(chicken.glideTime);
+      chicken.x = chicken.startX + (chicken.targetX - chicken.startX) * glide;
+      chicken.y = chicken.startY + (chicken.targetY - chicken.startY) * glide;
+      chicken.hop = Math.max(0, chicken.hop - dt * 3.2);
+
+      state.visualScroll += (0 - state.visualScroll) * Math.min(1, dt * 7);
+      if (Math.abs(state.visualScroll) < 0.35) state.visualScroll = 0;
+
+      updateMovers(dt);
+      updateFeathers(dt);
+      checkCollisions(dt);
+      collectCoins();
+      draw();
+      requestAnimationFrame(update);
+    }
+
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    function updateMovers(dt) {
+      const leftBound = state.offsetX - state.tile * 3;
+      const rightBound = state.offsetX + state.cols * state.tile + state.tile * 3;
+
+      for (const car of state.cars) {
+        car.x += car.speed * dt;
+        wrapMover(car, leftBound, rightBound);
+      }
+
+      for (const log of state.logs) {
+        log.x += log.speed * dt;
+        wrapMover(log, leftBound, rightBound);
+      }
+    }
+
+    function wrapMover(mover, leftBound, rightBound) {
+      if (mover.speed > 0 && mover.x - mover.width / 2 > rightBound) mover.x = leftBound - mover.width / 2;
+      if (mover.speed < 0 && mover.x + mover.width / 2 < leftBound) mover.x = rightBound + mover.width / 2;
+    }
+
+    function updateFeathers(dt) {
+      for (const feather of state.feathers) {
+        feather.x += feather.vx * dt;
+        feather.y += feather.vy * dt;
+        feather.vy += 380 * dt;
+        feather.life -= dt;
+      }
+
+      state.feathers = state.feathers.filter((feather) => feather.life > 0);
+    }
+
+    function checkCollisions(dt) {
+      if (state.gameOver) return;
+
+      const activeRow = chickenCollisionRow();
+      const lane = state.lanes[activeRow];
+      if (!lane) return;
+
+      if (lane.type === 'road' || lane.type === 'rail') {
+        const hit = state.cars.some((car) => (
+          car.row === activeRow &&
+          overlapsCar(car)
+        ));
+        if (hit) lose();
+      }
+
+      if (lane.type === 'water') {
+        const character = currentCharacter();
+        const ridingLog = state.logs.find((log) => (
+          log.row === activeRow &&
+          Math.abs(log.x - chicken.x) < log.width / 2 + state.tile * 0.12 * character.riverGrip
+        ));
+
+        if (ridingLog) {
+          const drift = ridingLog.speed * dt / character.riverGrip;
+          chicken.x += drift;
+          chicken.startX += drift;
+          chicken.targetX += drift;
+          chicken.col = clamp(xToCol(chicken.x), 0, state.cols - 1);
+          if (chicken.x < state.offsetX || chicken.x > state.offsetX + state.cols * state.tile) lose();
+        } else {
+          lose();
+        }
+      }
+    }
+
+    function collectCoins() {
+      const pickupRadius = state.tile * 0.42 * currentCharacter().magnet;
+
+      for (const coin of state.coinItems) {
+        if (coin.collected) continue;
+        const dx = coin.x - chicken.x;
+        const dy = rowToY(coin.row) - chicken.y;
+        if (Math.hypot(dx, dy) < pickupRadius) {
+          coin.collected = true;
+          state.coins += 1;
+          localStorage.setItem(coinsKey, String(state.coins));
+          coinsEl.textContent = state.coins;
+          state.score += 1;
+          scoreEl.textContent = state.score;
+          updateBest();
+        }
+      }
+
+      state.coinItems = state.coinItems.filter((coin) => !coin.collected);
+    }
+
+    function useMachine() {
+      const machine = nearbyMachine();
+      if (!machine) {
+        showMessage('Find a character machine');
+        return;
+      }
+
+      if (state.coins < characterCost) {
+        showMessage(`${characterCost - state.coins} more coins needed`);
+        return;
+      }
+
+      state.coins -= characterCost;
+      state.characterIndex = (state.characterIndex + 1) % characters.length;
+      localStorage.setItem(coinsKey, String(state.coins));
+      localStorage.setItem(characterKey, String(state.characterIndex));
+      coinsEl.textContent = state.coins;
+      updateSkinHud();
+      showMessage(`${currentCharacter().name}: ${currentCharacter().description}`);
+    }
+
+    function nearbyMachine() {
+      return state.machines.find((machine) => (
+        Math.abs(machine.x - chicken.x) < state.tile * 0.9 &&
+        Math.abs(rowToY(machine.row) - chicken.y) < state.tile * 0.9
+      ));
+    }
+
+    function showMessage(message) {
+      state.message = message;
+      state.messageTimer = 1.7;
+    }
+
+    function chickenCollisionRow() {
+      const row = Math.round((chicken.y - state.offsetY - state.tile / 2) / state.tile);
+      return Math.max(0, Math.min(state.rows - 1, row));
+    }
+
+    function overlapsCar(car) {
+      const hitbox = currentCharacter().hitbox;
+      const chickenRadiusX = state.tile * 0.18 * hitbox;
+      const chickenRadiusY = state.tile * 0.19 * hitbox;
+      const carHalfWidth = car.width * 0.42;
+      const carHalfHeight = car.height * 0.38;
+      const dx = Math.abs(car.x - chicken.x);
+      const dy = Math.abs(rowToY(car.row) - chicken.y);
+
+      return dx < carHalfWidth + chickenRadiusX && dy < carHalfHeight + chickenRadiusY;
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+      ctx.save();
+
+      if (state.shake > 0) {
+        ctx.translate((Math.random() - 0.5) * 8 * state.shake * 3, (Math.random() - 0.5) * 8 * state.shake * 3);
+      }
+
+      drawWorld();
+      drawMachines();
+      drawMovers();
+      drawCoins();
+      drawChicken();
+      drawFeathers();
+      drawVignette();
+      ctx.restore();
+
+      if (!state.started && !state.gameOver) drawIntro();
+      if (state.gameOver) drawGameOver();
+      drawMachinePrompt();
+      drawToast();
+    }
+
+    function drawWorld() {
+      for (const lane of state.lanes) {
+        const y = visualLaneY(lane.row);
+        if (lane.type === 'grass') drawGrass(y, lane.row);
+        if (lane.type === 'road') drawRoad(y);
+        if (lane.type === 'rail') drawRail(y);
+        if (lane.type === 'water') drawWater(y);
+      }
+    }
+
+    function visualLaneY(row) {
+      return state.offsetY + row * state.tile + state.visualScroll;
+    }
+
+    function visualRowY(row) {
+      return rowToY(row) + state.visualScroll;
+    }
+
+    function drawGrass(y, row) {
+      const grass = ctx.createLinearGradient(0, y, 0, y + state.tile);
+      grass.addColorStop(0, row % 2 ? '#2f7d58' : '#46a06f');
+      grass.addColorStop(1, row % 2 ? '#256d4b' : '#368b5f');
+      ctx.fillStyle = grass;
+      ctx.fillRect(0, y, window.innerWidth, state.tile);
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+      for (let col = 0; col < state.cols; col += 2) {
+        const x = state.offsetX + col * state.tile + ((row * 13) % 24);
+        drawGrassBlade(x, y + state.tile * 0.72);
+        if ((col + row) % 4 === 0) drawFlower(x + state.tile * 0.42, y + state.tile * 0.34, row);
+      }
+
+      ctx.fillStyle = 'rgba(8, 47, 73, 0.08)';
+      ctx.fillRect(0, y + state.tile - 3, window.innerWidth, 3);
+    }
+
+    function drawRoad(y) {
+      const road = ctx.createLinearGradient(0, y, 0, y + state.tile);
+      road.addColorStop(0, '#475569');
+      road.addColorStop(0.5, '#334155');
+      road.addColorStop(1, '#283548');
+      ctx.fillStyle = road;
+      ctx.fillRect(0, y, window.innerWidth, state.tile);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+      ctx.fillRect(0, y, window.innerWidth, 3);
+      ctx.fillStyle = 'rgba(226, 232, 240, 0.78)';
+      for (let x = state.offsetX; x < window.innerWidth + state.tile; x += state.tile * 1.45) {
+        roundedRect(x, y + state.tile / 2 - 2, state.tile * 0.72, 4, 2, 'rgba(248, 250, 252, 0.78)');
+      }
+    }
+
+    function drawRail(y) {
+      const rail = ctx.createLinearGradient(0, y, 0, y + state.tile);
+      rail.addColorStop(0, '#64748b');
+      rail.addColorStop(1, '#475569');
+      ctx.fillStyle = rail;
+      ctx.fillRect(0, y, window.innerWidth, state.tile);
+      ctx.fillStyle = '#1f2937';
+      ctx.fillRect(0, y + state.tile * 0.25, window.innerWidth, 6);
+      ctx.fillRect(0, y + state.tile * 0.72, window.innerWidth, 6);
+      ctx.fillStyle = '#cbd5e1';
+      for (let x = state.offsetX; x < window.innerWidth + state.tile; x += state.tile * 0.55) {
+        roundedRect(x, y + state.tile * 0.18, 7, state.tile * 0.66, 2, '#94a3b8');
+      }
+    }
+
+    function drawWater(y) {
+      const water = ctx.createLinearGradient(0, y, 0, y + state.tile);
+      water.addColorStop(0, '#38bdf8');
+      water.addColorStop(1, '#0284c7');
+      ctx.fillStyle = water;
+      ctx.fillRect(0, y, window.innerWidth, state.tile);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.28)';
+      ctx.lineWidth = 2;
+      for (let x = -state.tile; x < window.innerWidth + state.tile; x += state.tile) {
+        ctx.beginPath();
+        ctx.arc(x + (state.time * 38) % state.tile, y + state.tile * 0.58, 16, 0.2, 2.8);
+        ctx.stroke();
+      }
+      ctx.fillStyle = 'rgba(7, 89, 133, 0.16)';
+      ctx.fillRect(0, y + state.tile - 4, window.innerWidth, 4);
+    }
+
+    function drawMovers() {
+      for (const log of state.logs) drawLog(log);
+      for (const car of state.cars) car.type === 'rail' ? drawTrain(car) : drawCar(car);
+    }
+
+    function drawMachines() {
+      for (const machine of state.machines) {
+        const y = visualRowY(machine.row);
+        const pulse = Math.sin(state.time * 3 + machine.wobble * Math.PI * 2) * 2;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.24)';
+        ctx.beginPath();
+        ctx.ellipse(machine.x, y + state.tile * 0.34, state.tile * 0.34, state.tile * 0.09, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        roundedRect(machine.x - state.tile * 0.28, y - state.tile * 0.38 + pulse, state.tile * 0.56, state.tile * 0.7, 7, '#7c3aed');
+        roundedRect(machine.x - state.tile * 0.2, y - state.tile * 0.29 + pulse, state.tile * 0.4, state.tile * 0.22, 5, '#c4b5fd');
+        roundedRect(machine.x - state.tile * 0.18, y + state.tile * 0.02 + pulse, state.tile * 0.36, state.tile * 0.18, 4, '#312e81');
+
+        ctx.fillStyle = '#facc15';
+        ctx.beginPath();
+        ctx.arc(machine.x + state.tile * 0.17, y - state.tile * 0.04 + pulse, state.tile * 0.055, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#f8fafc';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `800 ${Math.max(11, state.tile * 0.18)}px Arial, Helvetica, sans-serif`;
+        ctx.fillText(String(characterCost), machine.x, y + state.tile * 0.11 + pulse);
+      }
+    }
+
+    function drawCoins() {
+      for (const coin of state.coinItems) {
+        const y = visualRowY(coin.row);
+        const bob = Math.sin(state.time * 5 + coin.pulse * Math.PI * 2) * state.tile * 0.04;
+        const radius = state.tile * 0.16;
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+        ctx.beginPath();
+        ctx.ellipse(coin.x, y + radius * 1.35, radius * 0.8, radius * 0.25, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        const coinGradient = ctx.createRadialGradient(coin.x - radius * 0.35, y + bob - radius * 0.35, radius * 0.2, coin.x, y + bob, radius);
+        coinGradient.addColorStop(0, '#fef3c7');
+        coinGradient.addColorStop(0.5, '#facc15');
+        coinGradient.addColorStop(1, '#d97706');
+        ctx.fillStyle = coinGradient;
+        ctx.beginPath();
+        ctx.arc(coin.x, y + bob, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#92400e';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(coin.x, y + bob, radius * 0.72, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
+        ctx.beginPath();
+        ctx.arc(coin.x - radius * 0.32, y + bob - radius * 0.36, radius * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawCar(car) {
+      const y = visualRowY(car.row);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(car.x, y + car.height * 0.45, car.width * 0.44, car.height * 0.18, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      roundedRect(car.x - car.width / 2, y - car.height / 2, car.width, car.height, 7, car.color);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+      roundedRect(car.x - car.width * 0.42, y - car.height * 0.37, car.width * 0.75, car.height * 0.18, 4, 'rgba(255, 255, 255, 0.18)');
+      roundedRect(car.x - car.width * 0.18, y - car.height * 0.32, car.width * 0.28, car.height * 0.25, 4, '#dbeafe');
+      roundedRect(car.x + car.width * 0.13, y - car.height * 0.32, car.width * 0.22, car.height * 0.25, 4, '#bfdbfe');
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(car.x - car.width * 0.36, y - car.height * 0.58, car.width * 0.2, 6);
+      ctx.fillRect(car.x + car.width * 0.18, y + car.height * 0.42, car.width * 0.2, 6);
+    }
+
+    function drawTrain(train) {
+      const y = visualRowY(train.row);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.3)';
+      ctx.beginPath();
+      ctx.ellipse(train.x, y + train.height * 0.47, train.width * 0.46, train.height * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+      roundedRect(train.x - train.width / 2, y - train.height / 2, train.width, train.height, 6, '#f8fafc');
+      ctx.fillStyle = '#ef4444';
+      ctx.fillRect(train.x - train.width / 2, y - train.height / 2, train.width, 8);
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.12)';
+      ctx.fillRect(train.x - train.width / 2 + 8, y + train.height * 0.24, train.width - 16, 4);
+      ctx.fillStyle = '#1e293b';
+      for (let i = -1; i <= 1; i++) {
+        ctx.fillRect(train.x + i * train.width * 0.23 - 8, y - 10, 16, 14);
+      }
+    }
+
+    function drawLog(log) {
+      const y = visualRowY(log.row);
+      ctx.fillStyle = 'rgba(7, 89, 133, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(log.x, y + log.height * 0.18, log.width * 0.48, log.height * 0.38, 0, 0, Math.PI * 2);
+      ctx.fill();
+      roundedRect(log.x - log.width / 2, y - log.height / 2, log.width, log.height, 14, '#9a642e');
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.16)';
+      ctx.fillRect(log.x - log.width * 0.34, y - 5, log.width * 0.55, 4);
+      ctx.fillStyle = '#6b3f1d';
+      ctx.beginPath();
+      ctx.arc(log.x - log.width / 2 + 12, y, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(75, 46, 19, 0.45)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(log.x - log.width * 0.22, y + log.height * 0.2);
+      ctx.lineTo(log.x + log.width * 0.32, y + log.height * 0.18);
+      ctx.stroke();
+    }
+
+    function drawChicken() {
+      if (state.gameOver && state.feathers.length) return;
+
+      const character = currentCharacter();
+      const hopLift = Math.sin(chicken.hop * Math.PI) * state.tile * 0.18;
+      ctx.save();
+      ctx.translate(chicken.x, chicken.y + state.visualScroll - hopLift);
+
+      if (chicken.facing === 'left') ctx.rotate(-0.2);
+      if (chicken.facing === 'right') ctx.rotate(0.2);
+
+      if (character.magnet > 1.4) {
+        ctx.strokeStyle = 'rgba(250, 204, 21, 0.22)';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, state.tile * 0.34 * character.magnet, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.22)';
+      ctx.beginPath();
+      ctx.ellipse(0, state.tile * 0.42 + hopLift * 0.35, state.tile * 0.24, state.tile * 0.08, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 5;
+      ctx.fillStyle = character.body;
+      ctx.beginPath();
+      ctx.ellipse(0, 4, state.tile * 0.26, state.tile * 0.31, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.shadowColor = 'transparent';
+      ctx.fillStyle = character.wing;
+      ctx.beginPath();
+      ctx.ellipse(-state.tile * 0.12, 7, state.tile * 0.13, state.tile * 0.21, -0.45, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = character.head;
+      ctx.beginPath();
+      ctx.arc(0, -state.tile * 0.24, state.tile * 0.19, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = character.comb;
+      ctx.beginPath();
+      ctx.arc(-6, -state.tile * 0.43, 6, 0, Math.PI * 2);
+      ctx.arc(0, -state.tile * 0.47, 7, 0, Math.PI * 2);
+      ctx.arc(7, -state.tile * 0.43, 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = character.beak;
+      ctx.beginPath();
+      ctx.moveTo(0, -state.tile * 0.22);
+      ctx.lineTo(18, -state.tile * 0.17);
+      ctx.lineTo(0, -state.tile * 0.1);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.arc(7, -state.tile * 0.28, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(8.2, -state.tile * 0.29, 1, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(-8, state.tile * 0.31);
+      ctx.lineTo(-14, state.tile * 0.43);
+      ctx.moveTo(9, state.tile * 0.31);
+      ctx.lineTo(15, state.tile * 0.43);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawGrassBlade(x, y) {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.14)';
+      ctx.fillRect(x, y, state.tile * 0.24, 3);
+      ctx.fillRect(x + state.tile * 0.08, y - 5, 3, 8);
+    }
+
+    function drawFlower(x, y, row) {
+      ctx.fillStyle = row % 3 === 0 ? '#facc15' : '#f9a8d4';
+      ctx.beginPath();
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2);
+      ctx.arc(x + 4, y + 1, 2.5, 0, Math.PI * 2);
+      ctx.arc(x + 2, y + 4, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawVignette() {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.12)';
+      ctx.fillRect(0, 0, window.innerWidth, 8);
+      ctx.fillRect(0, window.innerHeight - 8, window.innerWidth, 8);
+    }
+
+    function drawMachinePrompt() {
+      if (state.gameOver || !nearbyMachine()) return;
+
+      const nextCharacter = characters[(state.characterIndex + 1) % characters.length];
+      const title = state.coins >= characterCost ? `Press E: ${nextCharacter.name} - ${nextCharacter.ability}` : `Need ${characterCost - state.coins} more coins`;
+      const subtitle = state.coins >= characterCost ? nextCharacter.description : `${nextCharacter.name}: ${nextCharacter.description}`;
+      const width = Math.min(520, window.innerWidth - 28);
+      const x = window.innerWidth / 2 - width / 2;
+      const y = 74;
+      roundedRect(x, y, width, 56, 7, 'rgba(15, 23, 42, 0.66)');
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '800 14px Arial, Helvetica, sans-serif';
+      ctx.fillText(title, window.innerWidth / 2, y + 18);
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.86)';
+      ctx.font = '700 12px Arial, Helvetica, sans-serif';
+      ctx.fillText(subtitle, window.innerWidth / 2, y + 38);
+    }
+
+    function drawToast() {
+      if (state.messageTimer <= 0) return;
+
+      const width = Math.min(520, window.innerWidth - 28);
+      const x = window.innerWidth / 2 - width / 2;
+      const y = window.innerHeight * 0.22;
+      ctx.globalAlpha = Math.min(1, state.messageTimer * 2);
+      roundedRect(x, y, width, 46, 7, 'rgba(15, 23, 42, 0.72)');
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '800 13px Arial, Helvetica, sans-serif';
+      ctx.fillText(state.message, window.innerWidth / 2, y + 23);
+      ctx.globalAlpha = 1;
+    }
+
+    function drawFeathers() {
+      ctx.fillStyle = '#fff7ed';
+      for (const feather of state.feathers) {
+        ctx.globalAlpha = Math.max(0, feather.life);
+        ctx.beginPath();
+        ctx.ellipse(feather.x, feather.y, feather.size * 0.55, feather.size, feather.vx * 0.01, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawIntro() {
+      overlayText('Cross the lanes', `${currentCharacter().name}: ${currentCharacter().description}`);
+    }
+
+    function drawGameOver() {
+      overlayText('Game over', 'Press Space, tap, or move to try again');
+    }
+
+    function overlayText(title, subtitle) {
+      const boxWidth = Math.min(380, window.innerWidth - 34);
+      const x = window.innerWidth / 2 - boxWidth / 2;
+      const y = window.innerHeight / 2 - 58;
+      roundedRect(x, y, boxWidth, 116, 8, 'rgba(15, 23, 42, 0.72)');
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.lineWidth = 1;
+      roundedRect(x, y, boxWidth, 116, 8, null, true);
+      ctx.fillStyle = '#f8fafc';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '800 30px Arial, Helvetica, sans-serif';
+      ctx.fillText(title, window.innerWidth / 2, y + 43);
+      ctx.font = '700 15px Arial, Helvetica, sans-serif';
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.86)';
+      ctx.fillText(subtitle, window.innerWidth / 2, y + 76);
+    }
+
+    function roundedRect(x, y, width, height, radius, fill, stroke) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      if (fill) {
+        ctx.fillStyle = fill;
+        ctx.fill();
+      }
+      if (stroke) ctx.stroke();
+    }
+
+    window.addEventListener('keydown', (event) => {
+      const key = event.key.toLowerCase();
+      if (key === 'arrowup' || key === 'w') move(0, -1);
+      if (key === 'arrowdown' || key === 's') move(0, 1);
+      if (key === 'arrowleft' || key === 'a') move(-1, 0);
+      if (key === 'arrowright' || key === 'd') move(1, 0);
+      if (key === 'e') useMachine();
+      if (key === ' ') state.gameOver ? reset() : move(0, -1);
+    });
+
+    canvas.addEventListener('pointerdown', (event) => {
+      touchStart = { x: event.clientX, y: event.clientY };
+      if (state.gameOver) reset();
+    });
+
+    canvas.addEventListener('pointerup', (event) => {
+      if (!touchStart) return;
+      const dx = event.clientX - touchStart.x;
+      const dy = event.clientY - touchStart.y;
+      touchStart = null;
+
+      if (Math.hypot(dx, dy) < 18) {
+        if (nearbyMachine()) {
+          useMachine();
+          return;
+        }
+        move(0, -1);
+        return;
+      }
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        move(dx > 0 ? 1 : -1, 0);
+      } else {
+        move(0, dy > 0 ? 1 : -1);
+      }
+    });
+
+    window.addEventListener('resize', resize);
+    resize();
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>

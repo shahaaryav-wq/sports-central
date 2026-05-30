@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Random Truck Drive</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #045dba;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    #game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: linear-gradient(160deg, #0d7be8 0%, #034c9f 100%);
+    }
+
+    .hud {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      color: white;
+      font-size: 14px;
+      line-height: 1.4;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+      user-select: none;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="A truck driving randomly around a blue screen"></canvas>
+  <div class="hud">Truck Drive<br>Click to randomize direction</div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    const truck = {
+      x: 220,
+      y: 160,
+      width: 118,
+      height: 52,
+      angle: 0,
+      targetAngle: 0,
+      speed: 175,
+      turnSpeed: 2.8,
+      nextTurnAt: 0
+    };
+
+    let lastTime = performance.now();
+
+    function resize() {
+      const pixelRatio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(window.innerWidth * pixelRatio);
+      canvas.height = Math.floor(window.innerHeight * pixelRatio);
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+      truck.x = Math.min(Math.max(truck.x, 80), window.innerWidth - 80);
+      truck.y = Math.min(Math.max(truck.y, 80), window.innerHeight - 80);
+    }
+
+    function randomAngle() {
+      return Math.random() * Math.PI * 2;
+    }
+
+    function scheduleTurn(now) {
+      truck.targetAngle = randomAngle();
+      truck.nextTurnAt = now + 500 + Math.random() * 1300;
+      truck.speed = 120 + Math.random() * 130;
+    }
+
+    function shortestAngleTurn(from, to) {
+      return Math.atan2(Math.sin(to - from), Math.cos(to - from));
+    }
+
+    function keepInBounds() {
+      const margin = 68;
+      const maxX = window.innerWidth - margin;
+      const maxY = window.innerHeight - margin;
+      let bounced = false;
+
+      if (truck.x < margin) {
+        truck.x = margin;
+        bounced = true;
+      } else if (truck.x > maxX) {
+        truck.x = maxX;
+        bounced = true;
+      }
+
+      if (truck.y < margin) {
+        truck.y = margin;
+        bounced = true;
+      } else if (truck.y > maxY) {
+        truck.y = maxY;
+        bounced = true;
+      }
+
+      if (bounced) {
+        const centerAngle = Math.atan2(
+          window.innerHeight / 2 - truck.y,
+          window.innerWidth / 2 - truck.x
+        );
+        truck.targetAngle = centerAngle + (Math.random() - 0.5) * 1.2;
+      }
+    }
+
+    function drawBackground(time) {
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+
+      const spacing = 82;
+      const drift = (time * 0.018) % spacing;
+
+      for (let x = -spacing + drift; x < window.innerWidth + spacing; x += spacing) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x - 160, window.innerHeight);
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    }
+
+    function drawTruck() {
+      ctx.save();
+      ctx.translate(truck.x, truck.y);
+      ctx.rotate(truck.angle);
+
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetY = 8;
+
+      ctx.fillStyle = '#f6ca36';
+      ctx.strokeStyle = '#1f2933';
+      ctx.lineWidth = 4;
+      roundedRect(-54, -24, 82, 48, 7, true, true);
+
+      ctx.fillStyle = '#ef5b2a';
+      roundedRect(20, -21, 40, 42, 6, true, true);
+
+      ctx.fillStyle = '#9ee7ff';
+      ctx.strokeStyle = '#1f2933';
+      ctx.lineWidth = 3;
+      roundedRect(30, -15, 22, 18, 4, true, true);
+
+      ctx.fillStyle = '#f9fafb';
+      ctx.fillRect(-44, -15, 34, 8);
+      ctx.fillRect(-4, -15, 19, 8);
+
+      ctx.fillStyle = '#fffbeb';
+      ctx.beginPath();
+      ctx.arc(62, -12, 5, 0, Math.PI * 2);
+      ctx.arc(62, 12, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      drawWheel(-34, -25);
+      drawWheel(20, -25);
+      drawWheel(-34, 25);
+      drawWheel(20, 25);
+
+      ctx.restore();
+    }
+
+    function drawWheel(x, y) {
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#d1d5db';
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function roundedRect(x, y, width, height, radius, fill, stroke) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+
+    function update(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.033);
+      lastTime = now;
+
+      if (now >= truck.nextTurnAt) {
+        scheduleTurn(now);
+      }
+
+      const angleDelta = shortestAngleTurn(truck.angle, truck.targetAngle);
+      const maxTurn = truck.turnSpeed * dt;
+      truck.angle += Math.max(-maxTurn, Math.min(maxTurn, angleDelta));
+
+      truck.x += Math.cos(truck.angle) * truck.speed * dt;
+      truck.y += Math.sin(truck.angle) * truck.speed * dt;
+      keepInBounds();
+
+      drawBackground(now);
+      drawTruck();
+
+      requestAnimationFrame(update);
+    }
+
+    canvas.addEventListener('click', () => scheduleTurn(performance.now()));
+    window.addEventListener('resize', resize);
+
+    resize();
+    scheduleTurn(performance.now());
+    requestAnimationFrame(update);
+  </script>
+</body>
+</html>

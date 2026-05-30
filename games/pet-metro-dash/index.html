@@ -1,0 +1,1556 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pet Metro Dash</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #17233a;
+      color: #f8fafc;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+    }
+
+    #game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #17233a;
+    }
+
+    .hud,
+    .help,
+    .panel {
+      position: fixed;
+      user-select: none;
+      pointer-events: none;
+      text-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+    }
+
+    .hud {
+      top: 14px;
+      left: 14px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      min-width: 96px;
+      padding: 8px 11px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(9, 15, 28, 0.6);
+      font-size: 14px;
+      font-weight: 700;
+      backdrop-filter: blur(8px);
+    }
+
+    .help {
+      right: 14px;
+      bottom: 14px;
+      max-width: 290px;
+      padding: 9px 11px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(9, 15, 28, 0.56);
+      color: #dbeafe;
+      font-size: 13px;
+      line-height: 1.4;
+      backdrop-filter: blur(8px);
+    }
+
+    .panel {
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(6, 10, 20, 0.45);
+      pointer-events: auto;
+    }
+
+    .panel.visible {
+      display: grid;
+    }
+
+    .card {
+      width: min(420px, 92vw);
+      padding: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: rgba(15, 23, 42, 0.92);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+      text-align: center;
+      backdrop-filter: blur(14px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: #cbd5e1;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    button {
+      height: 42px;
+      padding: 0 17px;
+      border: 0;
+      border-radius: 7px;
+      background: #facc15;
+      color: #241a00;
+      font: inherit;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .shop-list {
+      display: grid;
+      gap: 10px;
+      margin: 14px 0 16px;
+      text-align: left;
+    }
+
+    .shop-item {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(30, 41, 59, 0.78);
+    }
+
+    .shop-item strong {
+      display: block;
+      margin-bottom: 3px;
+      color: #f8fafc;
+      font-size: 15px;
+    }
+
+    .shop-item span {
+      color: #cbd5e1;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .shop-item button {
+      min-width: 82px;
+    }
+
+    @media (max-width: 700px) {
+      .hud {
+        right: 14px;
+      }
+
+      .pill {
+        min-width: 82px;
+        font-size: 13px;
+      }
+
+      .help {
+        left: 14px;
+        right: 14px;
+        max-width: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="Pet Metro Dash endless runner game"></canvas>
+
+  <div class="hud" aria-hidden="true">
+    <div class="pill">Score <span id="score">0</span></div>
+    <div class="pill">Coins <span id="coins">0</span></div>
+    <div class="pill">Best <span id="best">0</span></div>
+    <div class="pill">Powers <span id="powerHud">1:0 2:0 3:0 4:0 5:0 6:0 7:0 8:0 9:0</span></div>
+  </div>
+
+  <div class="help" aria-hidden="true">Arrow keys or A/D change lanes. Up/W jumps. Down slides. S opens shop. 1-9 use powerups.</div>
+
+  <div class="panel visible" id="startPanel">
+    <div class="card">
+      <h1>Pet Metro Dash</h1>
+      <p>Dash through a busy city rail yard, grab coins, jump barriers, slide under signs, and dodge fast obstacle waves.</p>
+      <button id="startButton" type="button">Start Run</button>
+    </div>
+  </div>
+
+  <div class="panel" id="gameOverPanel">
+    <div class="card">
+      <h1>Run Over</h1>
+      <p id="resultText">Score 0</p>
+      <button id="restartButton" type="button">Run Again</button>
+    </div>
+  </div>
+
+  <div class="panel" id="shopPanel">
+    <div class="card">
+      <h1>Shop</h1>
+      <p>Spend coins from this run. Press S again to return.</p>
+      <div class="shop-list">
+        <div class="shop-item">
+          <div><strong>1 Shield - 15</strong><span>Blocks one crash.</span></div>
+          <button class="buyButton" data-power="shield" type="button">Buy</button>
+        </div>
+        <div class="shop-item">
+          <div><strong>2 Magnet - 20</strong><span>Pulls in nearby coins for 10 seconds.</span></div>
+          <button class="buyButton" data-power="magnet" type="button">Buy</button>
+        </div>
+        <div class="shop-item">
+          <div><strong>3 Slow - 25</strong><span>Slows obstacle speed for 7 seconds.</span></div>
+          <button class="buyButton" data-power="slow" type="button">Buy</button>
+        </div>
+        <div class="shop-item">
+          <div><strong>4 Air Jump - 18</strong><span>Gives one extra jump while airborne.</span></div>
+          <button class="buyButton" data-power="airJump" type="button">Buy</button>
+        </div>
+        <div class="shop-item">
+          <div><strong>5 Lane Clear - 30</strong><span>Removes close obstacles in your lane.</span></div>
+          <button class="buyButton" data-power="laneClear" type="button">Buy</button>
+        </div>
+        <div class="shop-item">
+          <div><strong>6 Coin Burst - 12</strong><span>Instantly creates bonus coins ahead.</span></div>
+          <button class="buyButton" data-power="coinBurst" type="button">Buy</button>
+        </div>
+        <div class="shop-item">
+          <div><strong>7 Ghost - 35</strong><span>Pass through obstacles for 5 seconds.</span></div>
+          <button class="buyButton" data-power="ghost" type="button">Buy</button>
+        </div>
+        <div class="shop-item">
+          <div><strong>8 Score Boost - 22</strong><span>Doubles score gain for 10 seconds.</span></div>
+          <button class="buyButton" data-power="scoreBoost" type="button">Buy</button>
+        </div>
+        <div class="shop-item">
+          <div><strong>9 Coin Doubler - 28</strong><span>Coins count double for 12 seconds.</span></div>
+          <button class="buyButton" data-power="coinDoubler" type="button">Buy</button>
+        </div>
+      </div>
+      <button id="closeShopButton" type="button">Back to Run</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const scoreText = document.getElementById('score');
+    const coinsText = document.getElementById('coins');
+    const bestText = document.getElementById('best');
+    const startPanel = document.getElementById('startPanel');
+    const gameOverPanel = document.getElementById('gameOverPanel');
+    const startButton = document.getElementById('startButton');
+    const restartButton = document.getElementById('restartButton');
+    const resultText = document.getElementById('resultText');
+    const powerHud = document.getElementById('powerHud');
+    const shopPanel = document.getElementById('shopPanel');
+    const closeShopButton = document.getElementById('closeShopButton');
+    const buyButtons = document.querySelectorAll('.buyButton');
+
+    const lanes = [-1, 0, 1];
+    const laneWidth = 138;
+    const roadBottomWidth = 470;
+    const roadTopWidth = 130;
+    const horizon = 105;
+    const player = {
+      lane: 0,
+      targetLane: 0,
+      x: 0,
+      y: 0,
+      jump: 0,
+      jumpVelocity: 0,
+      jumpClearTime: 0,
+      slideTime: 0,
+      invulnerableTime: 0,
+      crashed: false,
+      crashTime: 0,
+      crashSpin: 0,
+      crashFall: 0
+    };
+
+    const state = {
+      running: false,
+      over: false,
+      time: 0,
+      score: 0,
+      coins: 0,
+      speed: 330,
+      distance: 0,
+      spawnTimer: 0,
+      coinTimer: 0,
+      obstacles: [],
+      coinsList: [],
+      tracksOffset: 0,
+      lastTime: performance.now(),
+      shopOpen: false,
+      powerups: {
+        shield: 0,
+        magnet: 0,
+        slow: 0,
+        airJump: 0,
+        laneClear: 0,
+        coinBurst: 0,
+        ghost: 0,
+        scoreBoost: 0,
+        coinDoubler: 0
+      },
+      effects: {
+        shield: false,
+        magnet: 0,
+        slow: 0,
+        airJumpReady: false,
+        ghost: 0,
+        scoreBoost: 0,
+        coinDoubler: 0
+      },
+      best: Number(localStorage.getItem('petMetroDashBest') || 0)
+    };
+
+    const powerupPrices = {
+      shield: 15,
+      magnet: 20,
+      slow: 25,
+      airJump: 18,
+      laneClear: 30,
+      coinBurst: 12,
+      ghost: 35,
+      scoreBoost: 22,
+      coinDoubler: 28
+    };
+
+    const obstacleTypes = [
+      { type: 'barrier', width: 72, height: 58, needsJump: true, color: '#ef4444' },
+      { type: 'sign', width: 84, height: 76, needsSlide: true, color: '#38bdf8' },
+      { type: 'cart', width: 86, height: 68, color: '#f97316' },
+      { type: 'bus', width: 104, height: 90, color: '#22c55e' }
+    ];
+
+    bestText.textContent = state.best;
+
+    function resize() {
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(window.innerWidth * ratio);
+      canvas.height = Math.floor(window.innerHeight * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      player.y = window.innerHeight - 108;
+      player.x = laneToX(player.targetLane, 1);
+    }
+
+    function laneToX(lane, depth) {
+      const center = window.innerWidth / 2;
+      const scale = 0.36 + depth * 0.64;
+      return center + lane * laneWidth * scale;
+    }
+
+    function resetGame() {
+      player.lane = 0;
+      player.targetLane = 0;
+      player.x = laneToX(0, 1);
+      player.jump = 0;
+      player.jumpVelocity = 0;
+      player.jumpClearTime = 0;
+      player.slideTime = 0;
+      player.invulnerableTime = 0;
+      player.crashed = false;
+      player.crashTime = 0;
+      player.crashSpin = 0;
+      player.crashFall = 0;
+
+      state.running = true;
+      state.over = false;
+      state.time = 0;
+      state.score = 0;
+      state.coins = 0;
+      state.speed = 330;
+      state.distance = 0;
+      state.spawnTimer = 0.5;
+      state.coinTimer = 0.15;
+      state.obstacles = [];
+      state.coinsList = [];
+      state.shopOpen = false;
+      state.powerups = createPowerupInventory();
+      state.effects = createPowerupEffects();
+      state.lastTime = performance.now();
+
+      scoreText.textContent = '0';
+      coinsText.textContent = '0';
+      updatePowerHud();
+      startPanel.classList.remove('visible');
+      gameOverPanel.classList.remove('visible');
+      shopPanel.classList.remove('visible');
+    }
+
+    function endGame() {
+      state.running = false;
+      state.over = true;
+      state.best = Math.max(state.best, Math.floor(state.score));
+      localStorage.setItem('petMetroDashBest', state.best);
+      bestText.textContent = state.best;
+      resultText.textContent = `Score ${Math.floor(state.score)}  Coins ${state.coins}`;
+      gameOverPanel.classList.add('visible');
+    }
+
+    function startCrash() {
+      if (player.crashed || state.over) return;
+      if (state.effects.shield) {
+        state.effects.shield = false;
+        player.invulnerableTime = 1.2;
+        updatePowerHud();
+        return;
+      }
+
+      player.crashed = true;
+      player.crashTime = 0;
+      player.crashSpin = 0;
+      player.crashFall = 0;
+      player.jumpVelocity = 0;
+      player.jumpClearTime = 0;
+      player.slideTime = 0;
+      state.running = false;
+    }
+
+    function createPowerupInventory() {
+      return {
+        shield: 0,
+        magnet: 0,
+        slow: 0,
+        airJump: 0,
+        laneClear: 0,
+        coinBurst: 0,
+        ghost: 0,
+        scoreBoost: 0,
+        coinDoubler: 0
+      };
+    }
+
+    function createPowerupEffects() {
+      return {
+        shield: false,
+        magnet: 0,
+        slow: 0,
+        airJumpReady: false,
+        ghost: 0,
+        scoreBoost: 0,
+        coinDoubler: 0
+      };
+    }
+
+    function toggleShop() {
+      if (!state.running || state.over || player.crashed) return;
+      state.shopOpen = !state.shopOpen;
+      shopPanel.classList.toggle('visible', state.shopOpen);
+      state.lastTime = performance.now();
+    }
+
+    function buyPowerup(type) {
+      const price = powerupPrices[type];
+      if (!price || state.coins < price) return;
+      state.coins -= price;
+      state.powerups[type] += 1;
+      coinsText.textContent = state.coins;
+      updatePowerHud();
+    }
+
+    function usePowerup(type) {
+      if (!state.running || state.shopOpen || player.crashed || state.powerups[type] <= 0) return;
+      state.powerups[type] -= 1;
+
+      if (type === 'shield') {
+        state.effects.shield = true;
+      } else if (type === 'magnet') {
+        state.effects.magnet = 10;
+      } else if (type === 'slow') {
+        state.effects.slow = 7;
+      } else if (type === 'airJump') {
+        state.effects.airJumpReady = true;
+      } else if (type === 'laneClear') {
+        clearCurrentLane();
+      } else if (type === 'coinBurst') {
+        spawnCoinBurst();
+      } else if (type === 'ghost') {
+        state.effects.ghost = 5;
+      } else if (type === 'scoreBoost') {
+        state.effects.scoreBoost = 10;
+      } else if (type === 'coinDoubler') {
+        state.effects.coinDoubler = 12;
+      }
+
+      updatePowerHud();
+    }
+
+    function updatePowerHud() {
+      const shield = state.effects.shield ? '*' : state.powerups.shield;
+      const magnet = state.effects.magnet > 0 ? `${Math.ceil(state.effects.magnet)}s` : state.powerups.magnet;
+      const slow = state.effects.slow > 0 ? `${Math.ceil(state.effects.slow)}s` : state.powerups.slow;
+      const airJump = state.effects.airJumpReady ? '*' : state.powerups.airJump;
+      const laneClear = state.powerups.laneClear;
+      const coinBurst = state.powerups.coinBurst;
+      const ghost = state.effects.ghost > 0 ? `${Math.ceil(state.effects.ghost)}s` : state.powerups.ghost;
+      const scoreBoost = state.effects.scoreBoost > 0 ? `${Math.ceil(state.effects.scoreBoost)}s` : state.powerups.scoreBoost;
+      const coinDoubler = state.effects.coinDoubler > 0 ? `${Math.ceil(state.effects.coinDoubler)}s` : state.powerups.coinDoubler;
+      powerHud.textContent = `1:${shield} 2:${magnet} 3:${slow} 4:${airJump} 5:${laneClear} 6:${coinBurst} 7:${ghost} 8:${scoreBoost} 9:${coinDoubler}`;
+    }
+
+    function clearCurrentLane() {
+      state.obstacles.forEach((item) => {
+        if (Math.abs(item.lane - player.targetLane) < 0.5 && item.z > -0.04 && item.z < 0.72) {
+          item.passed = true;
+          item.collected = true;
+        }
+      });
+    }
+
+    function spawnCoinBurst() {
+      for (let i = 0; i < 12; i += 1) {
+        state.coinsList.push({
+          lane: lanes[i % lanes.length],
+          z: 0.45 + i * 0.07,
+          collected: false
+        });
+      }
+    }
+
+    function moveLane(direction) {
+      if (!state.running || state.shopOpen || player.crashed) return;
+      player.targetLane = Math.max(-1, Math.min(1, player.targetLane + direction));
+    }
+
+    function jump() {
+      if (!state.running || state.shopOpen || player.crashed || player.slideTime > 0) return;
+      if (player.jump > 0 && !state.effects.airJumpReady) return;
+      if (player.jump > 0 && state.effects.airJumpReady) {
+        state.effects.airJumpReady = false;
+      }
+      player.jumpVelocity = 760;
+      player.jumpClearTime = 0.78;
+      updatePowerHud();
+    }
+
+    function slide() {
+      if (!state.running || state.shopOpen || player.crashed || player.jump > 0) return;
+      player.slideTime = 0.62;
+    }
+
+    function spawnObstacle() {
+      const difficulty = getDifficulty();
+      const patternRoll = Math.random();
+      if (state.time > 4 && patternRoll < 0.52 + difficulty * 0.34) {
+        spawnComboWave(difficulty);
+        return;
+      }
+
+      const count = Math.random() > 0.34 - difficulty * 0.25 ? 2 : 1;
+      const used = new Set();
+
+      for (let i = 0; i < count; i += 1) {
+        let lane = Math.random() < 0.68 + difficulty * 0.2
+          ? Math.round(player.targetLane)
+          : lanes[Math.floor(Math.random() * lanes.length)];
+        let guard = 0;
+        while (used.has(lane) && guard < 10) {
+          lane = lanes[Math.floor(Math.random() * lanes.length)];
+          guard += 1;
+        }
+
+        used.add(lane);
+        const info = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+        state.obstacles.push({
+          lane,
+          z: 1.35 + Math.random() * 0.18,
+          passed: false,
+          ...info
+        });
+      }
+    }
+
+    function spawnComboWave(difficulty) {
+      const waveType = Math.random();
+
+      if (waveType < 0.32) {
+        const openLane = lanes[Math.floor(Math.random() * lanes.length)];
+        for (const lane of lanes) {
+          if (lane === openLane) continue;
+          const info = Math.random() < 0.5 ? obstacleTypes[0] : obstacleTypes[1];
+          state.obstacles.push({
+            lane,
+            z: 1.28 + Math.random() * 0.08,
+            passed: false,
+            ...info
+          });
+        }
+        return;
+      }
+
+      if (waveType < 0.68) {
+        const sequence = Math.random() < 0.5
+          ? [
+              { lane: -1, info: obstacleTypes[0] },
+              { lane: 0, info: obstacleTypes[1] },
+              { lane: 1, info: obstacleTypes[0] }
+            ]
+          : [
+              { lane: 1, info: obstacleTypes[1] },
+              { lane: 0, info: obstacleTypes[0] },
+              { lane: -1, info: obstacleTypes[1] }
+            ];
+
+        sequence.forEach((entry, index) => {
+          state.obstacles.push({
+            lane: entry.lane,
+            z: 1.18 + index * (0.16 - difficulty * 0.04),
+            passed: false,
+            ...entry.info
+          });
+        });
+        return;
+      }
+
+      const openLane = lanes[Math.floor(Math.random() * lanes.length)];
+      lanes.forEach((lane, index) => {
+        if (lane === openLane) return;
+        state.obstacles.push({
+          lane,
+          z: 1.12 + index * 0.08,
+          passed: false,
+          ...obstacleTypes[Math.random() < 0.5 ? 2 : 3]
+        });
+      });
+
+      if (difficulty > 0.25 && Math.random() < 0.62) {
+        state.obstacles.push({
+          lane: openLane,
+          z: 1.42,
+          passed: false,
+          ...obstacleTypes[Math.random() < 0.5 ? 0 : 1]
+        });
+      }
+    }
+
+    function spawnCoinRow() {
+      const lane = lanes[Math.floor(Math.random() * lanes.length)];
+      for (let i = 0; i < 5; i += 1) {
+        state.coinsList.push({
+          lane,
+          z: 1.2 + i * 0.12,
+          collected: false
+        });
+      }
+    }
+
+    function update(dt) {
+      if (player.crashed) {
+        updateCrash(dt);
+        return;
+      }
+
+      if (state.shopOpen) {
+        return;
+      }
+
+      if (!state.running) return;
+
+      state.time += dt;
+      state.distance += state.speed * dt;
+      const difficulty = getDifficulty();
+      const slowMultiplier = state.effects.slow > 0 ? 0.62 : 1;
+      state.speed = (330 + difficulty * 330) * slowMultiplier;
+      const scoreMultiplier = state.effects.scoreBoost > 0 ? 2 : 1;
+      state.score += dt * (12 + state.speed * 0.035) * scoreMultiplier;
+      state.tracksOffset = (state.tracksOffset + state.speed * dt) % 90;
+      state.spawnTimer -= dt;
+      state.coinTimer -= dt;
+
+      if (state.spawnTimer <= 0) {
+        spawnObstacle();
+        preventImpossibleWalls();
+        state.spawnTimer = Math.max(0.2, 0.68 - difficulty * 0.34) + Math.random() * Math.max(0.07, 0.16 - difficulty * 0.06);
+      }
+
+      if (state.coinTimer <= 0) {
+        spawnCoinRow();
+        state.coinTimer = 1.1 + Math.random() * 1.3;
+      }
+
+      const laneDelta = player.targetLane - player.lane;
+      player.lane += laneDelta * Math.min(1, dt * 10);
+      player.x = laneToX(player.lane, 1);
+
+      if (player.jumpVelocity > 0 || player.jump > 0) {
+        player.jump += player.jumpVelocity * dt;
+        player.jumpVelocity -= 1750 * dt;
+        if (player.jump <= 0) {
+          player.jump = 0;
+          player.jumpVelocity = 0;
+        }
+      }
+
+      player.slideTime = Math.max(0, player.slideTime - dt);
+      player.jumpClearTime = Math.max(0, player.jumpClearTime - dt);
+      player.invulnerableTime = Math.max(0, player.invulnerableTime - dt);
+      state.effects.magnet = Math.max(0, state.effects.magnet - dt);
+      state.effects.slow = Math.max(0, state.effects.slow - dt);
+      state.effects.ghost = Math.max(0, state.effects.ghost - dt);
+      state.effects.scoreBoost = Math.max(0, state.effects.scoreBoost - dt);
+      state.effects.coinDoubler = Math.max(0, state.effects.coinDoubler - dt);
+
+      updateObjects(state.obstacles, dt, false);
+      updateObjects(state.coinsList, dt, true);
+      scoreText.textContent = Math.floor(state.score);
+      coinsText.textContent = state.coins;
+      updatePowerHud();
+    }
+
+    function updateCrash(dt) {
+      player.crashTime += dt;
+      player.crashSpin += dt * 10;
+
+      if (player.crashTime > 0.7) {
+        player.crashFall += dt * 380;
+      }
+
+      if (player.crashTime > 1.55) {
+        player.crashed = false;
+        endGame();
+      }
+    }
+
+    function getDifficulty() {
+      return Math.min(1, state.time / 180);
+    }
+
+    function preventImpossibleWalls() {
+      const groups = new Map();
+      state.obstacles.forEach((item) => {
+        if (item.z < 0.8 || item.z > 1.6) return;
+        const key = Math.round(item.z * 4) / 4;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(item);
+      });
+
+      groups.forEach((items) => {
+        const lanesBlocked = new Set(items.map((item) => item.lane));
+        if (lanesBlocked.size < 3) return;
+        const removable = items[items.length - 1];
+        removable.z += 0.34;
+      });
+    }
+
+    function updateObjects(items, dt, coin) {
+      for (const item of items) {
+        item.z -= dt * state.speed / 620;
+      }
+
+      for (const item of items) {
+        const sameLane = Math.abs(item.lane - player.lane) < 0.42;
+
+        if (coin) {
+          const coinPoint = project(item.z, item.lane);
+          const coinY = coinPoint.y - 52 * coinPoint.scale;
+          const collectRange = state.effects.magnet > 0 ? 180 : 58;
+          const sameLaneOrMagnet = sameLane || state.effects.magnet > 0;
+          const nearPlayer = Math.abs(coinY - (getPlayerBaseY() - player.jump - 28)) < collectRange;
+
+          if (!item.collected && sameLaneOrMagnet && nearPlayer) {
+            item.collected = true;
+            state.coins += state.effects.coinDoubler > 0 ? 2 : 1;
+            state.score += 35;
+          }
+          continue;
+        }
+
+        if (!sameLane) continue;
+        if (state.effects.ghost > 0) {
+          item.passed = true;
+          continue;
+        }
+        if (item.passed || player.invulnerableTime > 0) continue;
+
+        const obstacleBox = getObstacleHitbox(item);
+        if (isInActionZone(item)) {
+          if (item.needsSlide) {
+            if (player.slideTime > 0) {
+              item.passed = true;
+              continue;
+            }
+          }
+
+          if (canJumpClearGroundObstacle(obstacleBox)) {
+            item.passed = true;
+            continue;
+          }
+        }
+
+        const groundObstacle = !item.needsSlide;
+        if (groundObstacle && canJumpClearGroundObstacle(obstacleBox)) {
+          item.passed = true;
+          continue;
+        }
+
+        const petBox = getPetHitbox();
+        if (!boxesOverlap(obstacleBox, petBox)) continue;
+
+        if (item.needsSlide && player.slideTime > 0) {
+          item.passed = true;
+          continue;
+        }
+
+        if (groundObstacle && canJumpClearGroundObstacle(obstacleBox)) {
+          item.passed = true;
+          continue;
+        }
+
+        startCrash();
+        item.passed = true;
+      }
+
+      const alive = items.filter((item) => item.z > -0.12 && !item.collected);
+      items.length = 0;
+      items.push(...alive);
+    }
+
+    function isInActionZone(item) {
+      return item.z > 0.02 && item.z < 0.26;
+    }
+
+    function canJumpClearGroundObstacle(obstacleBox) {
+      const obstacleCenterY = (obstacleBox.top + obstacleBox.bottom) / 2;
+      const baseY = getPlayerBaseY();
+      const nearPlayer = obstacleCenterY > baseY - 165 && obstacleCenterY < baseY + 58;
+      return nearPlayer && player.jumpClearTime > 0 && player.jump > 10;
+    }
+
+    function getObstacleHitbox(item) {
+      const p = project(item.z, item.lane);
+      const width = item.width * p.scale;
+      const height = item.height * p.scale;
+
+      if (item.type === 'sign') {
+        return {
+          left: p.x - width * 0.62,
+          right: p.x + width * 0.62,
+          top: p.y - height,
+          bottom: p.y - height * 0.5
+        };
+      }
+
+      return {
+        left: p.x - width * 0.42,
+        right: p.x + width * 0.42,
+        top: p.y - height * 0.82,
+        bottom: p.y - height * 0.08
+      };
+    }
+
+    function getPetHitbox() {
+      const sliding = player.slideTime > 0;
+      const topOffset = sliding ? 44 : 72;
+      const bottomOffset = sliding ? 34 : 48;
+      const baseY = getPlayerBaseY();
+      return {
+        left: player.x - 26,
+        right: player.x + 26,
+        top: baseY - player.jump - topOffset,
+        bottom: baseY - player.jump + bottomOffset
+      };
+    }
+
+    function getPlayerBaseY() {
+      return player.y;
+    }
+
+    function boxesOverlap(a, b) {
+      return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    }
+
+    function draw() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      ctx.clearRect(0, 0, width, height);
+      drawSky(width, height);
+      drawCity(width, height);
+      drawRoad(width, height);
+      drawCoins();
+      drawObstacles();
+      drawPlayer();
+
+      if (!state.running && !state.over && !player.crashed) {
+        drawPreviewPet(width, height);
+      }
+    }
+
+    function drawSky(width, height) {
+      const sky = ctx.createLinearGradient(0, 0, 0, height);
+      sky.addColorStop(0, '#13213e');
+      sky.addColorStop(0.36, '#335f8f');
+      sky.addColorStop(0.72, '#f59e72');
+      sky.addColorStop(1, '#172033');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, width, height);
+
+      const sunX = width - 88;
+      const sunY = 72;
+      const glow = ctx.createRadialGradient(sunX, sunY, 4, sunX, sunY, 145);
+      glow.addColorStop(0, 'rgba(255, 237, 128, 0.95)');
+      glow.addColorStop(0.28, 'rgba(251, 191, 36, 0.32)');
+      glow.addColorStop(1, 'rgba(251, 191, 36, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(width - 260, 0, 260, 220);
+
+      ctx.fillStyle = '#fde68a';
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, 31, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawCity(width, height) {
+      drawBuildingLayer(width, 0.28, '#18253d', '#273c5c', 84, 56);
+      drawBuildingLayer(width, 0.55, '#0f1b2e', '#1e3150', 118, 72);
+
+      const ground = ctx.createLinearGradient(0, horizon + 42, 0, height);
+      ground.addColorStop(0, '#111827');
+      ground.addColorStop(1, '#060b14');
+      ctx.fillStyle = ground;
+      ctx.fillRect(0, horizon + 44, width, height - horizon);
+    }
+
+    function drawBuildingLayer(width, parallax, faceColor, sideColor, maxHeight, step) {
+      const drift = -(state.distance * 0.012 * parallax) % step;
+      for (let x = drift - step; x < width + step; x += step) {
+        const buildingHeight = 64 + Math.abs(Math.sin((x + step) * 0.021)) * maxHeight;
+        const y = horizon + 54 - buildingHeight;
+        const w = step * 0.7;
+        const depth = 11 + parallax * 12;
+
+        ctx.fillStyle = faceColor;
+        ctx.fillRect(x, y, w, buildingHeight);
+        ctx.fillStyle = sideColor;
+        ctx.beginPath();
+        ctx.moveTo(x + w, y);
+        ctx.lineTo(x + w + depth, y + depth * 0.55);
+        ctx.lineTo(x + w + depth, y + buildingHeight + depth * 0.55);
+        ctx.lineTo(x + w, y + buildingHeight);
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.58)';
+        for (let wy = y + 18; wy < horizon + 36; wy += 24) {
+          ctx.fillRect(x + 9, wy, 7, 10);
+          ctx.fillRect(x + 26, wy + 4, 7, 10);
+        }
+      }
+    }
+
+    function drawRoad(width, height) {
+      const center = width / 2;
+      const bottom = height + 70;
+
+      const road = ctx.createLinearGradient(0, horizon, 0, bottom);
+      road.addColorStop(0, '#59616f');
+      road.addColorStop(0.45, '#343b48');
+      road.addColorStop(1, '#141923');
+      ctx.fillStyle = road;
+      ctx.beginPath();
+      ctx.moveTo(center - roadTopWidth, horizon);
+      ctx.lineTo(center + roadTopWidth, horizon);
+      ctx.lineTo(center + roadBottomWidth, bottom);
+      ctx.lineTo(center - roadBottomWidth, bottom);
+      ctx.closePath();
+      ctx.fill();
+
+      const tieGap = 54;
+      const tieOffset = state.tracksOffset % tieGap;
+      for (let y = horizon + 16 + tieOffset; y < bottom; y += tieGap) {
+        const depth = (y - horizon) / (bottom - horizon);
+        const tieWidth = roadTopWidth * 1.45 + depth * roadBottomWidth * 1.15;
+        ctx.strokeStyle = `rgba(15, 23, 42, ${0.22 + depth * 0.45})`;
+        ctx.lineWidth = 5 + depth * 8;
+        ctx.beginPath();
+        ctx.moveTo(center - tieWidth / 2, y);
+        ctx.lineTo(center + tieWidth / 2, y);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#8ca3bf';
+      ctx.lineWidth = 5;
+      for (const lane of [-0.5, 0.5]) {
+        ctx.beginPath();
+        ctx.moveTo(laneToX(lane, 0), horizon);
+        ctx.lineTo(laneToX(lane, 1.12), bottom);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.34)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(laneToX(lane, 0) + 6, horizon);
+        ctx.lineTo(laneToX(lane, 1.12) + 18, bottom);
+        ctx.stroke();
+        ctx.strokeStyle = '#8ca3bf';
+        ctx.lineWidth = 5;
+      }
+
+      ctx.strokeStyle = '#f8fafc';
+      ctx.lineWidth = 4;
+      ctx.setLineDash([34, 26]);
+      ctx.lineDashOffset = -state.tracksOffset;
+      ctx.beginPath();
+      ctx.moveTo(center, horizon);
+      ctx.lineTo(center, bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.strokeStyle = '#050914';
+      ctx.lineWidth = 13;
+      ctx.beginPath();
+      ctx.moveTo(center - roadTopWidth - 9, horizon);
+      ctx.lineTo(center - roadBottomWidth - 28, bottom);
+      ctx.moveTo(center + roadTopWidth + 9, horizon);
+      ctx.lineTo(center + roadBottomWidth + 28, bottom);
+      ctx.stroke();
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(center - roadTopWidth - 20, horizon);
+      ctx.lineTo(center - roadBottomWidth - 54, bottom);
+      ctx.moveTo(center + roadTopWidth + 20, horizon);
+      ctx.lineTo(center + roadBottomWidth + 54, bottom);
+      ctx.stroke();
+    }
+
+    function project(z, lane) {
+      const depth = Math.max(0, Math.min(1, 1 - z));
+      const y = horizon + depth * depth * (window.innerHeight - horizon + 80);
+      const scale = 0.28 + depth * 0.9;
+      return {
+        x: laneToX(lane, depth),
+        y,
+        scale,
+        depth
+      };
+    }
+
+    function drawCoins() {
+      const ordered = [...state.coinsList].sort((a, b) => b.z - a.z);
+      for (const coin of ordered) {
+        const p = project(coin.z, coin.lane);
+        const r = 12 * p.scale;
+        const y = p.y - 52 * p.scale;
+        const coinGradient = ctx.createRadialGradient(p.x - r * 0.3, y - r * 0.4, 1, p.x, y, r);
+        coinGradient.addColorStop(0, '#fff7ad');
+        coinGradient.addColorStop(0.45, '#facc15');
+        coinGradient.addColorStop(1, '#b45309');
+        ctx.shadowColor = 'rgba(250, 204, 21, 0.55)';
+        ctx.shadowBlur = 18 * p.scale;
+        ctx.fillStyle = coinGradient;
+        ctx.strokeStyle = '#fef3c7';
+        ctx.lineWidth = Math.max(1, 3 * p.scale);
+        ctx.beginPath();
+        ctx.ellipse(p.x, y, r * 0.72, r, Math.sin(state.time * 5 + coin.z) * 0.18, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    function drawObstacles() {
+      const ordered = [...state.obstacles].sort((a, b) => b.z - a.z);
+      for (const item of ordered) {
+        const p = project(item.z, item.lane);
+        const width = item.width * p.scale;
+        const height = item.height * p.scale;
+        const x = p.x - width / 2;
+        const y = p.y - height;
+
+        drawObjectShadow(p.x, p.y, width * 0.55, p.scale);
+
+        if (item.type === 'sign') {
+          ctx.strokeStyle = '#dbeafe';
+          ctx.lineWidth = 6 * p.scale;
+          ctx.beginPath();
+          ctx.moveTo(x, p.y);
+          ctx.lineTo(x, y + height * 0.22);
+          ctx.moveTo(x + width, p.y);
+          ctx.lineTo(x + width, y + height * 0.22);
+          ctx.stroke();
+          drawPrism(x - 10 * p.scale, y, width + 20 * p.scale, height * 0.42, 9 * p.scale, '#38bdf8', '#0f172a');
+          ctx.fillStyle = '#e0f2fe';
+          ctx.font = `${Math.max(8, 13 * p.scale)}px Arial`;
+          ctx.textAlign = 'center';
+          ctx.fillText('SLIDE', p.x, y + height * 0.27);
+          continue;
+        }
+
+        drawPrism(x, y, width, height, 9 * p.scale, item.color, '#111827');
+
+        if (item.type === 'barrier') {
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(x + width * 0.12, y + height * 0.26, width * 0.76, height * 0.14);
+          ctx.fillRect(x + width * 0.12, y + height * 0.6, width * 0.76, height * 0.14);
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.18)';
+          ctx.fillRect(x + width * 0.12, y + height * 0.43, width * 0.76, height * 0.08);
+        } else if (item.type === 'bus' || item.type === 'cart') {
+          const windowGradient = ctx.createLinearGradient(x, y, x, y + height * 0.45);
+          windowGradient.addColorStop(0, '#e0f2fe');
+          windowGradient.addColorStop(1, '#60a5fa');
+          ctx.fillStyle = windowGradient;
+          roundedRect(x + width * 0.13, y + height * 0.16, width * 0.3, height * 0.23, 3 * p.scale, windowGradient, 'rgba(15, 23, 42, 0.55)');
+          roundedRect(x + width * 0.56, y + height * 0.16, width * 0.3, height * 0.23, 3 * p.scale, windowGradient, 'rgba(15, 23, 42, 0.55)');
+          drawWheel(x + width * 0.24, y + height, 8 * p.scale);
+          drawWheel(x + width * 0.76, y + height, 8 * p.scale);
+        }
+      }
+    }
+
+    function drawPlayer() {
+      const baseY = getPlayerBaseY();
+      const y = baseY - player.jump + player.crashFall;
+      const slideScale = player.slideTime > 0 ? 0.72 : 1;
+      ctx.save();
+      ctx.translate(player.x, y);
+      if (player.crashed) {
+        const wobble = Math.sin(player.crashSpin) * 0.18;
+        ctx.rotate(player.crashSpin * 0.18 + wobble);
+        ctx.scale(1.04, 0.92);
+      } else {
+        ctx.scale(1, slideScale);
+      }
+
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+      ctx.shadowBlur = 24;
+      ctx.shadowOffsetY = 10;
+
+      drawPet(0, 0, 1);
+      ctx.restore();
+
+      if (!player.crashed) {
+        drawPowerAura(player.x, y);
+      }
+
+      if (player.crashed) {
+        drawCrashStars(player.x, y - 76);
+      }
+
+      ctx.globalAlpha = 0.34;
+      ctx.fillStyle = '#020617';
+      ctx.beginPath();
+      ctx.ellipse(player.x, baseY + 39, Math.max(22, 48 - player.jump * 0.08), 14, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawPowerAura(x, y) {
+      if (state.effects.shield) {
+        ctx.save();
+        ctx.globalAlpha = 0.42 + Math.sin(state.time * 10) * 0.12;
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.ellipse(x, y - 6, 44, 62, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      if (state.effects.magnet > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.45;
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([8, 8]);
+        ctx.beginPath();
+        ctx.arc(x, y - 24, 68, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      if (state.effects.ghost > 0) {
+        ctx.save();
+        ctx.globalAlpha = 0.32;
+        ctx.fillStyle = '#a78bfa';
+        ctx.beginPath();
+        ctx.ellipse(x, y - 8, 52, 66, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      if (state.effects.scoreBoost > 0 || state.effects.coinDoubler > 0 || state.effects.airJumpReady) {
+        ctx.save();
+        ctx.font = '18px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = state.effects.coinDoubler > 0 ? '#facc15' : '#dcfce7';
+        const label = state.effects.airJumpReady ? 'AIR' : (state.effects.coinDoubler > 0 ? '2x' : 'SCORE');
+        ctx.fillText(label, x, y - 86);
+        ctx.restore();
+      }
+    }
+
+    function drawCrashStars(x, y) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(-player.crashSpin * 0.35);
+
+      for (let i = 0; i < 5; i += 1) {
+        const angle = (Math.PI * 2 * i) / 5 + player.crashSpin * 0.55;
+        const radius = 28 + Math.sin(player.crashSpin + i) * 5;
+        drawStar(Math.cos(angle) * radius, Math.sin(angle) * 10 - 8, 8, '#facc15', '#92400e');
+      }
+
+      ctx.restore();
+    }
+
+    function drawStar(x, y, radius, fill, stroke) {
+      ctx.beginPath();
+      for (let i = 0; i < 10; i += 1) {
+        const pointRadius = i % 2 === 0 ? radius : radius * 0.44;
+        const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+        const px = x + Math.cos(angle) * pointRadius;
+        const py = y + Math.sin(angle) * pointRadius;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    function drawPreviewPet(width, height) {
+      ctx.save();
+      ctx.translate(width / 2, height - 112);
+      drawPet(0, 0, 1);
+      ctx.restore();
+    }
+
+    function drawPet(x, y, scale) {
+      const fur = ctx.createRadialGradient(x - 14 * scale, y - 42 * scale, 4, x, y - 8 * scale, 74 * scale);
+      fur.addColorStop(0, '#fff7ed');
+      fur.addColorStop(0.32, '#fbbf24');
+      fur.addColorStop(0.72, '#f97316');
+      fur.addColorStop(1, '#9a3412');
+      const hoodie = ctx.createLinearGradient(x, y - 8 * scale, x, y + 45 * scale);
+      hoodie.addColorStop(0, '#22c55e');
+      hoodie.addColorStop(0.58, '#16a34a');
+      hoodie.addColorStop(1, '#14532d');
+
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 3.5 * scale;
+
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+
+      ctx.strokeStyle = '#9a3412';
+      ctx.lineWidth = 9 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x + 26 * scale, y + 16 * scale);
+      ctx.bezierCurveTo(x + 58 * scale, y + 6 * scale, x + 60 * scale, y - 34 * scale, x + 32 * scale, y - 31 * scale);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#f97316';
+      ctx.lineWidth = 5 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x + 28 * scale, y + 13 * scale);
+      ctx.bezierCurveTo(x + 50 * scale, y + 4 * scale, x + 50 * scale, y - 25 * scale, x + 33 * scale, y - 23 * scale);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.ellipse(x, y + 9 * scale, 31 * scale, 32 * scale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = hoodie;
+      ctx.fill();
+      ctx.strokeStyle = '#052e16';
+      ctx.stroke();
+
+      ctx.fillStyle = '#dcfce7';
+      ctx.beginPath();
+      ctx.arc(x - 12 * scale, y - 4 * scale, 4 * scale, 0, Math.PI * 2);
+      ctx.arc(x + 12 * scale, y - 4 * scale, 4 * scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#f8fafc';
+      ctx.lineWidth = 2 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x - 8 * scale, y + 20 * scale);
+      ctx.lineTo(x - 16 * scale, y + 38 * scale);
+      ctx.moveTo(x + 8 * scale, y + 20 * scale);
+      ctx.lineTo(x + 16 * scale, y + 38 * scale);
+      ctx.stroke();
+
+      ctx.fillStyle = fur;
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 3.5 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x - 24 * scale, y - 48 * scale);
+      ctx.lineTo(x - 42 * scale, y - 74 * scale);
+      ctx.lineTo(x - 31 * scale, y - 39 * scale);
+      ctx.moveTo(x + 24 * scale, y - 48 * scale);
+      ctx.lineTo(x + 42 * scale, y - 74 * scale);
+      ctx.lineTo(x + 31 * scale, y - 39 * scale);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#fed7aa';
+      ctx.beginPath();
+      ctx.moveTo(x - 29 * scale, y - 51 * scale);
+      ctx.lineTo(x - 38 * scale, y - 66 * scale);
+      ctx.lineTo(x - 32 * scale, y - 45 * scale);
+      ctx.moveTo(x + 29 * scale, y - 51 * scale);
+      ctx.lineTo(x + 38 * scale, y - 66 * scale);
+      ctx.lineTo(x + 32 * scale, y - 45 * scale);
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.ellipse(x, y - 34 * scale, 29 * scale, 27 * scale, 0, 0, Math.PI * 2);
+      ctx.fillStyle = fur;
+      ctx.fill();
+      ctx.strokeStyle = '#111827';
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+      ctx.beginPath();
+      ctx.ellipse(x - 12 * scale, y - 44 * scale, 9 * scale, 5 * scale, -0.45, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#7c2d12';
+      ctx.lineWidth = 2.2 * scale;
+      for (let i = 0; i < 3; i += 1) {
+        const stripeX = x - 8 * scale + i * 8 * scale;
+        ctx.beginPath();
+        ctx.moveTo(stripeX, y - 61 * scale);
+        ctx.lineTo(stripeX - 3 * scale, y - 48 * scale);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.ellipse(x - 10 * scale, y - 36 * scale, 4.5 * scale, 6 * scale, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + 10 * scale, y - 36 * scale, 4.5 * scale, 6 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.arc(x - 11 * scale, y - 38 * scale, 1.5 * scale, 0, Math.PI * 2);
+      ctx.arc(x + 9 * scale, y - 38 * scale, 1.5 * scale, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#fff7ed';
+      ctx.beginPath();
+      ctx.ellipse(x, y - 22 * scale, 13 * scale, 9 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#be123c';
+      ctx.beginPath();
+      ctx.ellipse(x, y - 26 * scale, 3.5 * scale, 2.8 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 1.6 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 24 * scale);
+      ctx.quadraticCurveTo(x - 5 * scale, y - 19 * scale, x - 9 * scale, y - 22 * scale);
+      ctx.moveTo(x, y - 24 * scale);
+      ctx.quadraticCurveTo(x + 5 * scale, y - 19 * scale, x + 9 * scale, y - 22 * scale);
+      ctx.stroke();
+
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 1.4 * scale;
+      for (let side = -1; side <= 1; side += 2) {
+        ctx.beginPath();
+        ctx.moveTo(x + side * 7 * scale, y - 23 * scale);
+        ctx.lineTo(x + side * 25 * scale, y - 27 * scale);
+        ctx.moveTo(x + side * 7 * scale, y - 20 * scale);
+        ctx.lineTo(x + side * 26 * scale, y - 19 * scale);
+        ctx.moveTo(x + side * 7 * scale, y - 17 * scale);
+        ctx.lineTo(x + side * 22 * scale, y - 12 * scale);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 7 * scale;
+      ctx.beginPath();
+      ctx.moveTo(x - 17 * scale, y + 29 * scale);
+      ctx.lineTo(x - 28 * scale, y + 50 * scale);
+      ctx.moveTo(x + 17 * scale, y + 29 * scale);
+      ctx.lineTo(x + 28 * scale, y + 50 * scale);
+      ctx.stroke();
+
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.ellipse(x - 30 * scale, y + 52 * scale, 8 * scale, 5 * scale, 0, 0, Math.PI * 2);
+      ctx.ellipse(x + 30 * scale, y + 52 * scale, 8 * scale, 5 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#111827';
+      ctx.lineWidth = 2 * scale;
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawObjectShadow(x, y, width, scale) {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = '#020617';
+      ctx.beginPath();
+      ctx.ellipse(x, y + 8 * scale, width, 12 * scale, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawPrism(x, y, width, height, depth, fill, stroke) {
+      const front = ctx.createLinearGradient(x, y, x, y + height);
+      front.addColorStop(0, lighten(fill, 0.28));
+      front.addColorStop(0.55, fill);
+      front.addColorStop(1, darken(fill, 0.18));
+
+      ctx.fillStyle = darken(fill, 0.28);
+      ctx.beginPath();
+      ctx.moveTo(x + width, y + depth);
+      ctx.lineTo(x + width + depth, y);
+      ctx.lineTo(x + width + depth, y + height - depth * 0.2);
+      ctx.lineTo(x + width, y + height);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = lighten(fill, 0.18);
+      ctx.beginPath();
+      ctx.moveTo(x + depth, y - depth);
+      ctx.lineTo(x + width + depth, y - depth);
+      ctx.lineTo(x + width, y);
+      ctx.lineTo(x, y);
+      ctx.closePath();
+      ctx.fill();
+
+      roundedRect(x, y, width, height, Math.max(2, depth * 0.65), front, stroke);
+    }
+
+    function drawWheel(x, y, radius) {
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#cbd5e1';
+      ctx.beginPath();
+      ctx.arc(x, y, radius * 0.42, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function lighten(hex, amount) {
+      return shadeColor(hex, amount);
+    }
+
+    function darken(hex, amount) {
+      return shadeColor(hex, -amount);
+    }
+
+    function shadeColor(hex, amount) {
+      const value = hex.replace('#', '');
+      const number = parseInt(value, 16);
+      const red = Math.max(0, Math.min(255, (number >> 16) + 255 * amount));
+      const green = Math.max(0, Math.min(255, ((number >> 8) & 255) + 255 * amount));
+      const blue = Math.max(0, Math.min(255, (number & 255) + 255 * amount));
+      return `rgb(${Math.round(red)}, ${Math.round(green)}, ${Math.round(blue)})`;
+    }
+
+    function roundedRect(x, y, width, height, radius, fill, stroke) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = Math.max(1, radius * 0.34);
+      ctx.stroke();
+    }
+
+    function frame(now) {
+      const dt = Math.min((now - state.lastTime) / 1000, 0.033);
+      state.lastTime = now;
+      update(dt);
+      draw();
+      requestAnimationFrame(frame);
+    }
+
+    window.addEventListener('keydown', (event) => {
+      const key = event.key.toLowerCase();
+      if (key === 's') {
+        toggleShop();
+        return;
+      }
+
+      if (key === '1') usePowerup('shield');
+      if (key === '2') usePowerup('magnet');
+      if (key === '3') usePowerup('slow');
+      if (key === '4') usePowerup('airJump');
+      if (key === '5') usePowerup('laneClear');
+      if (key === '6') usePowerup('coinBurst');
+      if (key === '7') usePowerup('ghost');
+      if (key === '8') usePowerup('scoreBoost');
+      if (key === '9') usePowerup('coinDoubler');
+
+      if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') moveLane(-1);
+      if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') moveLane(1);
+      if (event.key === 'ArrowUp' || event.key.toLowerCase() === 'w' || event.key === ' ') jump();
+      if (event.key === 'ArrowDown') slide();
+      if (!state.running && (event.key === 'Enter' || event.key === ' ')) resetGame();
+    });
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    window.addEventListener('pointerdown', (event) => {
+      touchStartX = event.clientX;
+      touchStartY = event.clientY;
+    });
+
+    window.addEventListener('pointerup', (event) => {
+      const dx = event.clientX - touchStartX;
+      const dy = event.clientY - touchStartY;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 24) {
+        moveLane(dx > 0 ? 1 : -1);
+      } else if (dy < -24) {
+        jump();
+      } else if (dy > 24) {
+        slide();
+      }
+    });
+
+    startButton.addEventListener('click', resetGame);
+    restartButton.addEventListener('click', resetGame);
+    closeShopButton.addEventListener('click', toggleShop);
+    buyButtons.forEach((button) => {
+      button.addEventListener('click', () => buyPowerup(button.dataset.power));
+    });
+    window.addEventListener('resize', resize);
+
+    resize();
+    updatePowerHud();
+    requestAnimationFrame(frame);
+  </script>
+</body>
+</html>

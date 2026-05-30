@@ -1,0 +1,1131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sports Central</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #91cce4;
+      --bg-2: #b9e0ef;
+      --card: #d6edf6;
+      --card-2: #c7e5f1;
+      --text: #1f2933;
+      --muted: #556270;
+      --line: rgba(255, 255, 255, 0.72);
+      --shadow: rgba(50, 83, 104, 0.16);
+      --blue: #63c5ee;
+      --green: #84ddc8;
+      --orange: #f7bd76;
+      --red: #f5a4a4;
+      --purple: #b8acf2;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+    }
+
+    body {
+      overflow-x: hidden;
+      background:
+        radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.42) 0 3px, transparent 4px),
+        radial-gradient(circle at 31% 60%, rgba(255, 255, 255, 0.44) 0 3px, transparent 4px),
+        radial-gradient(circle at 64% 35%, rgba(255, 255, 255, 0.38) 0 3px, transparent 4px),
+        linear-gradient(180deg, var(--bg-2), var(--bg));
+      background-size: 260px 260px, 310px 310px, 360px 360px, auto;
+      color: var(--text);
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    .app {
+      width: min(1480px, 100%);
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: clamp(18px, 3vw, 34px);
+      display: grid;
+      gap: 24px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 78px;
+    }
+
+    .title-wrap {
+      display: grid;
+      gap: 7px;
+    }
+
+    .kicker {
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(34px, 7vw, 74px);
+      line-height: 0.9;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      font-size: clamp(28px, 5vw, 48px);
+      line-height: 0.95;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      font-size: clamp(22px, 3vw, 34px);
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .sub {
+      color: var(--muted);
+      font-size: clamp(16px, 2vw, 22px);
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .search {
+      width: min(360px, 100%);
+      height: 46px;
+      padding: 0 16px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: rgba(229, 245, 251, 0.88);
+      color: var(--text);
+      font-weight: 700;
+      outline: none;
+      box-shadow: 0 10px 28px var(--shadow);
+    }
+
+    .search:focus {
+      border-color: var(--blue);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: clamp(16px, 2.4vw, 28px);
+      align-items: stretch;
+    }
+
+    .card {
+      min-height: 238px;
+      padding: clamp(22px, 3vw, 34px);
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: rgba(214, 237, 246, 0.84);
+      color: var(--text);
+      text-align: left;
+      box-shadow: 0 22px 55px var(--shadow);
+      display: grid;
+      align-content: space-between;
+      gap: 18px;
+      transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
+    }
+
+    .card:hover,
+    .card:focus-visible {
+      transform: translateY(-4px);
+      background: rgba(226, 246, 253, 0.96);
+      border-color: rgba(255, 255, 255, 0.96);
+    }
+
+    .emoji {
+      display: block;
+      font-size: 44px;
+      line-height: 1;
+    }
+
+    .card-title {
+      display: block;
+      font-size: clamp(24px, 3.2vw, 34px);
+      font-weight: 900;
+      line-height: 1.05;
+      letter-spacing: 0;
+    }
+
+    .card-copy {
+      display: block;
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: clamp(16px, 2.1vw, 22px);
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      min-height: 34px;
+    }
+
+    .chip {
+      min-height: 34px;
+      padding: 5px 16px;
+      border: 2px solid var(--chip-color);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.28);
+      color: #27313c;
+      font-size: 16px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .plain-button,
+    .primary-button {
+      min-height: 44px;
+      padding: 0 16px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: rgba(214, 237, 246, 0.88);
+      color: var(--text);
+      font-weight: 900;
+      box-shadow: 0 10px 28px var(--shadow);
+    }
+
+    .primary-button {
+      border-color: #7ac9e9;
+      background: #9bdcf3;
+    }
+
+    .detail {
+      display: grid;
+      grid-template-columns: minmax(260px, 390px) 1fr;
+      gap: clamp(16px, 2.4vw, 28px);
+      align-items: start;
+    }
+
+    .team-hero,
+    .stats-panel {
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: rgba(214, 237, 246, 0.86);
+      box-shadow: 0 22px 55px var(--shadow);
+    }
+
+    .team-hero {
+      min-height: 380px;
+      padding: clamp(24px, 3vw, 34px);
+      display: grid;
+      align-content: space-between;
+      gap: 18px;
+    }
+
+    .badge {
+      display: grid;
+      width: 110px;
+      height: 110px;
+      place-items: center;
+      border: 3px solid rgba(255, 255, 255, 0.82);
+      border-radius: 8px;
+      background: linear-gradient(135deg, var(--team-a), var(--team-b));
+      color: white;
+      font-size: 34px;
+      font-weight: 900;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.32);
+    }
+
+    .stats-panel {
+      padding: clamp(20px, 2.5vw, 28px);
+      display: grid;
+      gap: 18px;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 12px;
+    }
+
+    .stat,
+    .matchup,
+    .meter-box {
+      min-height: 86px;
+      padding: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.58);
+      border-radius: 8px;
+      background: rgba(232, 247, 252, 0.72);
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .value {
+      margin-top: 8px;
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .meter-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .bar {
+      overflow: hidden;
+      height: 14px;
+      margin-top: 12px;
+      border-radius: 999px;
+      background: rgba(85, 98, 112, 0.18);
+    }
+
+    .bar span {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--team-a), var(--team-b));
+    }
+
+    .matchup {
+      display: grid;
+      gap: 8px;
+    }
+
+    .follow-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 10px;
+    }
+
+    .follow-item {
+      min-height: 70px;
+      padding: 13px;
+      border: 2px solid rgba(255, 255, 255, 0.58);
+      border-radius: 8px;
+      background: rgba(232, 247, 252, 0.72);
+      display: grid;
+      gap: 4px;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 18px;
+      background: rgba(65, 113, 139, 0.52);
+      z-index: 10;
+    }
+
+    .modal-backdrop.visible {
+      display: grid;
+    }
+
+    .modal {
+      width: min(480px, 100%);
+      padding: 24px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: #d9f0f8;
+      box-shadow: 0 22px 55px rgba(50, 83, 104, 0.28);
+      display: grid;
+      gap: 16px;
+    }
+
+    .modal input {
+      width: 100%;
+      height: 48px;
+      padding: 0 14px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.58);
+      color: var(--text);
+      font-weight: 800;
+      outline: none;
+    }
+
+    .modal input:focus {
+      border-color: var(--blue);
+    }
+
+    .modal-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+
+    .toast {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: min(420px, calc(100vw - 36px));
+      padding: 13px 15px;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      background: #d9f0f8;
+      color: var(--text);
+      font-weight: 800;
+      box-shadow: 0 18px 44px rgba(50, 83, 104, 0.24);
+      transform: translateY(130%);
+      transition: transform 160ms ease;
+      z-index: 12;
+    }
+
+    .toast.visible {
+      transform: translateY(0);
+    }
+
+    @media (max-width: 980px) {
+      .topbar {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .toolbar {
+        justify-content: flex-start;
+      }
+
+      .search {
+        width: 100%;
+      }
+
+      .detail {
+        grid-template-columns: 1fr;
+      }
+
+      .stat-grid,
+      .meter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 620px) {
+      .app {
+        padding: 14px;
+      }
+
+      .grid,
+      .stat-grid,
+      .meter-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .card {
+        min-height: 210px;
+      }
+
+      .team-hero {
+        min-height: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="title-wrap">
+        <div class="kicker" id="kicker">League folders</div>
+        <h1 id="pageTitle">Sports Central</h1>
+        <p class="sub" id="pageSubtitle">Pick a league to open every team.</p>
+      </div>
+      <div class="toolbar">
+        <button class="plain-button hidden" id="backButton" type="button">Back</button>
+        <input class="search hidden" id="search" type="search" placeholder="Search teams">
+      </div>
+    </header>
+
+    <main id="content"></main>
+  </div>
+
+  <div class="modal-backdrop" id="modalBackdrop">
+    <form class="modal" id="followForm">
+      <div class="title-wrap">
+        <div class="kicker">Game alerts</div>
+        <h3 id="modalTitle">Follow team</h3>
+        <p class="sub" id="modalCopy">Enter your email for game reminders and final score updates.</p>
+      </div>
+      <input id="emailInput" type="email" autocomplete="email" placeholder="your@email.com" required>
+      <div class="modal-actions">
+        <button class="plain-button" id="cancelFollow" type="button">Cancel</button>
+        <button class="primary-button" type="submit">Follow</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const leagues = [
+      {
+        id: 'nfl',
+        name: 'NFL',
+        fullName: 'National Football League',
+        sport: 'Football',
+        emoji: '🏈',
+        color: '#63c5ee',
+        copy: 'Open all 32 football teams and scout their next matchup.',
+        tags: ['football', '32 teams'],
+        teams: ['Arizona Cardinals', 'Atlanta Falcons', 'Baltimore Ravens', 'Buffalo Bills', 'Carolina Panthers', 'Chicago Bears', 'Cincinnati Bengals', 'Cleveland Browns', 'Dallas Cowboys', 'Denver Broncos', 'Detroit Lions', 'Green Bay Packers', 'Houston Texans', 'Indianapolis Colts', 'Jacksonville Jaguars', 'Kansas City Chiefs', 'Las Vegas Raiders', 'Los Angeles Chargers', 'Los Angeles Rams', 'Miami Dolphins', 'Minnesota Vikings', 'New England Patriots', 'New Orleans Saints', 'New York Giants', 'New York Jets', 'Philadelphia Eagles', 'Pittsburgh Steelers', 'San Francisco 49ers', 'Seattle Seahawks', 'Tampa Bay Buccaneers', 'Tennessee Titans', 'Washington Commanders']
+      },
+      {
+        id: 'nba',
+        name: 'NBA',
+        fullName: 'National Basketball Association',
+        sport: 'Basketball',
+        emoji: '🏀',
+        color: '#f7bd76',
+        copy: 'Jump into every pro basketball team and compare power ratings.',
+        tags: ['basketball', '30 teams'],
+        teams: ['Atlanta Hawks', 'Boston Celtics', 'Brooklyn Nets', 'Charlotte Hornets', 'Chicago Bulls', 'Cleveland Cavaliers', 'Dallas Mavericks', 'Denver Nuggets', 'Detroit Pistons', 'Golden State Warriors', 'Houston Rockets', 'Indiana Pacers', 'LA Clippers', 'Los Angeles Lakers', 'Memphis Grizzlies', 'Miami Heat', 'Milwaukee Bucks', 'Minnesota Timberwolves', 'New Orleans Pelicans', 'New York Knicks', 'Oklahoma City Thunder', 'Orlando Magic', 'Philadelphia 76ers', 'Phoenix Suns', 'Portland Trail Blazers', 'Sacramento Kings', 'San Antonio Spurs', 'Toronto Raptors', 'Utah Jazz', 'Washington Wizards']
+      },
+      {
+        id: 'mlb',
+        name: 'MLB',
+        fullName: 'Major League Baseball',
+        sport: 'Baseball',
+        emoji: '⚾',
+        color: '#f5a4a4',
+        copy: 'Live regular-season records and next games refresh every 30 seconds.',
+        tags: ['live data', '30 teams'],
+        teams: ['Arizona Diamondbacks', 'Athletics', 'Atlanta Braves', 'Baltimore Orioles', 'Boston Red Sox', 'Chicago Cubs', 'Chicago White Sox', 'Cincinnati Reds', 'Cleveland Guardians', 'Colorado Rockies', 'Detroit Tigers', 'Houston Astros', 'Kansas City Royals', 'Los Angeles Angels', 'Los Angeles Dodgers', 'Miami Marlins', 'Milwaukee Brewers', 'Minnesota Twins', 'New York Mets', 'New York Yankees', 'Philadelphia Phillies', 'Pittsburgh Pirates', 'San Diego Padres', 'San Francisco Giants', 'Seattle Mariners', 'St. Louis Cardinals', 'Tampa Bay Rays', 'Texas Rangers', 'Toronto Blue Jays', 'Washington Nationals']
+      },
+      {
+        id: 'nhl',
+        name: 'NHL',
+        fullName: 'National Hockey League',
+        sport: 'Hockey',
+        emoji: '🏒',
+        color: '#b8acf2',
+        copy: 'Open every hockey club and track form, defense, and streaks.',
+        tags: ['hockey', '32 teams'],
+        teams: ['Anaheim Ducks', 'Boston Bruins', 'Buffalo Sabres', 'Calgary Flames', 'Carolina Hurricanes', 'Chicago Blackhawks', 'Colorado Avalanche', 'Columbus Blue Jackets', 'Dallas Stars', 'Detroit Red Wings', 'Edmonton Oilers', 'Florida Panthers', 'Los Angeles Kings', 'Minnesota Wild', 'Montreal Canadiens', 'Nashville Predators', 'New Jersey Devils', 'New York Islanders', 'New York Rangers', 'Ottawa Senators', 'Philadelphia Flyers', 'Pittsburgh Penguins', 'San Jose Sharks', 'Seattle Kraken', 'St. Louis Blues', 'Tampa Bay Lightning', 'Toronto Maple Leafs', 'Utah Mammoth', 'Vancouver Canucks', 'Vegas Golden Knights', 'Washington Capitals', 'Winnipeg Jets']
+      },
+      {
+        id: 'mls',
+        name: 'MLS',
+        fullName: 'Major League Soccer',
+        sport: 'Soccer',
+        emoji: '⚽',
+        color: '#84ddc8',
+        copy: 'See every soccer club in one folder-like team grid.',
+        tags: ['soccer', '30 teams'],
+        teams: ['Atlanta United', 'Austin FC', 'Charlotte FC', 'Chicago Fire FC', 'Colorado Rapids', 'Columbus Crew', 'D.C. United', 'FC Cincinnati', 'FC Dallas', 'Houston Dynamo FC', 'Inter Miami CF', 'LA Galaxy', 'Los Angeles Football Club', 'Minnesota United FC', 'CF Montreal', 'Nashville SC', 'New England Revolution', 'New York City FC', 'Orlando City SC', 'Philadelphia Union', 'Portland Timbers', 'Real Salt Lake', 'Red Bull New York', 'San Diego FC', 'San Jose Earthquakes', 'Seattle Sounders FC', 'Sporting Kansas City', 'St. Louis CITY SC', 'Toronto FC', 'Vancouver Whitecaps FC']
+      },
+      {
+        id: 'wnba',
+        name: 'WNBA',
+        fullName: 'Women\'s National Basketball Association',
+        sport: 'Basketball',
+        emoji: '⭐',
+        color: '#f7bd76',
+        copy: 'Follow women’s basketball teams with saved email alerts.',
+        tags: ['basketball', '15 teams'],
+        teams: ['Atlanta Dream', 'Chicago Sky', 'Connecticut Sun', 'Dallas Wings', 'Golden State Valkyries', 'Indiana Fever', 'Las Vegas Aces', 'Los Angeles Sparks', 'Minnesota Lynx', 'New York Liberty', 'Phoenix Mercury', 'Portland Fire', 'Seattle Storm', 'Toronto Tempo', 'Washington Mystics']
+      }
+    ];
+
+    const content = document.getElementById('content');
+    const kicker = document.getElementById('kicker');
+    const pageTitle = document.getElementById('pageTitle');
+    const pageSubtitle = document.getElementById('pageSubtitle');
+    const backButton = document.getElementById('backButton');
+    const search = document.getElementById('search');
+    const modalBackdrop = document.getElementById('modalBackdrop');
+    const followForm = document.getElementById('followForm');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalCopy = document.getElementById('modalCopy');
+    const emailInput = document.getElementById('emailInput');
+    const cancelFollow = document.getElementById('cancelFollow');
+    const toast = document.getElementById('toast');
+
+    let view = 'leagues';
+    let activeLeague = null;
+    let activeTeam = null;
+    let pendingFollowTeam = null;
+    let toastTimer = 0;
+    let liveRefreshTimer = 0;
+    let mlbLoading = false;
+    let mlbLastUpdated = null;
+    const liveMlbData = {};
+    const subscriptions = loadSubscriptions();
+    const mlbTeamIds = {
+      'Arizona Diamondbacks': 109,
+      Athletics: 133,
+      'Atlanta Braves': 144,
+      'Baltimore Orioles': 110,
+      'Boston Red Sox': 111,
+      'Chicago Cubs': 112,
+      'Chicago White Sox': 145,
+      'Cincinnati Reds': 113,
+      'Cleveland Guardians': 114,
+      'Colorado Rockies': 115,
+      'Detroit Tigers': 116,
+      'Houston Astros': 117,
+      'Kansas City Royals': 118,
+      'Los Angeles Angels': 108,
+      'Los Angeles Dodgers': 119,
+      'Miami Marlins': 146,
+      'Milwaukee Brewers': 158,
+      'Minnesota Twins': 142,
+      'New York Mets': 121,
+      'New York Yankees': 147,
+      'Philadelphia Phillies': 143,
+      'Pittsburgh Pirates': 134,
+      'San Diego Padres': 135,
+      'San Francisco Giants': 137,
+      'Seattle Mariners': 136,
+      'St. Louis Cardinals': 138,
+      'Tampa Bay Rays': 139,
+      'Texas Rangers': 140,
+      'Toronto Blue Jays': 141,
+      'Washington Nationals': 120
+    };
+
+    function hashText(text) {
+      let hash = 0;
+      for (let index = 0; index < text.length; index += 1) {
+        hash = (hash * 31 + text.charCodeAt(index)) >>> 0;
+      }
+      return hash;
+    }
+
+    function loadSubscriptions() {
+      try {
+        return JSON.parse(localStorage.getItem('sports-central-follows')) || [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function saveSubscriptions() {
+      localStorage.setItem('sports-central-follows', JSON.stringify(subscriptions));
+    }
+
+    function teamInitials(name) {
+      return name
+        .replace(/FC|SC|CF|LA|D\.C\./g, '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(-2)
+        .map((word) => word[0])
+        .join('')
+        .toUpperCase();
+    }
+
+    function teamColors(teamName) {
+      const palette = [
+        ['#4f8fd9', '#f28f6b'],
+        ['#18a999', '#f2c94c'],
+        ['#7868e6', '#64c7a8'],
+        ['#da5e5e', '#2f3a4a'],
+        ['#2b9ec5', '#f0a64d'],
+        ['#6272d9', '#e1b64f']
+      ];
+      return palette[hashText(teamName) % palette.length];
+    }
+
+    function dateString(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function formatGameDate(value) {
+      if (!value) {
+        return 'time TBA';
+      }
+      return new Intl.DateTimeFormat(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      }).format(new Date(value));
+    }
+
+    function getMlbLive(teamName) {
+      return liveMlbData[teamName] || null;
+    }
+
+    async function refreshMlbData(force = false) {
+      const mlb = leagues.find((league) => league.id === 'mlb');
+      if (!mlb || mlbLoading) {
+        return;
+      }
+      if (!force && mlbLastUpdated && Date.now() - mlbLastUpdated < 25000) {
+        return;
+      }
+
+      mlbLoading = true;
+      try {
+        const standingsUrl = 'https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=2026&standingsTypes=regularSeason';
+        const standingsResponse = await fetch(standingsUrl);
+        if (!standingsResponse.ok) {
+          throw new Error('MLB standings request failed');
+        }
+        const standings = await standingsResponse.json();
+        const liveById = {};
+
+        standings.records.forEach((division) => {
+          division.teamRecords.forEach((record) => {
+            liveById[record.team.id] = {
+              record: `${record.wins}-${record.losses}`,
+              wins: record.wins,
+              losses: record.losses,
+              winPct: record.winningPercentage || '.000',
+              rank: Number(record.leagueRank) || Number(record.divisionRank) || 0,
+              streak: record.streak?.streakCode || 'N/A',
+              divisionRank: record.divisionRank || 'N/A'
+            };
+          });
+        });
+
+        const today = new Date();
+        const end = new Date(today);
+        end.setDate(today.getDate() + 45);
+        const scheduleUrl = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&season=2026&gameType=R&startDate=${dateString(today)}&endDate=${dateString(end)}&hydrate=team,gameInfo`;
+        const scheduleResponse = await fetch(scheduleUrl);
+        if (!scheduleResponse.ok) {
+          throw new Error('MLB schedule request failed');
+        }
+        const schedule = await scheduleResponse.json();
+        const nextGames = {};
+
+        schedule.dates.forEach((date) => {
+          date.games.forEach((game) => {
+            const awayId = game.teams.away.team.id;
+            const homeId = game.teams.home.team.id;
+            [awayId, homeId].forEach((teamId) => {
+              if (!nextGames[teamId]) {
+                const home = teamId === homeId;
+                const opponent = home ? game.teams.away.team.name : game.teams.home.team.name;
+                nextGames[teamId] = {
+                  label: `${home ? 'vs' : 'at'} ${opponent}`,
+                  date: game.gameDate,
+                  status: game.status?.detailedState || 'Scheduled',
+                  venue: game.venue?.name || ''
+                };
+              }
+            });
+          });
+        });
+
+        Object.entries(mlbTeamIds).forEach(([teamName, teamId]) => {
+          const record = liveById[teamId];
+          if (!record) {
+            return;
+          }
+          const next = nextGames[teamId];
+          liveMlbData[teamName] = {
+            ...record,
+            nextGame: next ? next.label : 'No upcoming regular-season game',
+            nextGameTime: next ? formatGameDate(next.date) : '',
+            broadcast: next?.venue || 'MLB regular season',
+            alertTime: '30 minutes before',
+            status: next?.status || 'Schedule unavailable',
+            source: 'Live MLB regular season'
+          };
+        });
+
+        mlbLastUpdated = Date.now();
+        if (activeLeague?.id === 'mlb') {
+          if (view === 'teams') {
+            renderTeams(activeLeague, false);
+          }
+          if (view === 'detail' && activeTeam) {
+            renderDetail(activeLeague, activeTeam, false);
+          }
+        }
+      } catch (error) {
+        showToast('MLB live data could not update. Showing saved fallback stats.');
+      } finally {
+        mlbLoading = false;
+      }
+    }
+
+    function startLiveRefresh() {
+      clearInterval(liveRefreshTimer);
+      liveRefreshTimer = setInterval(() => {
+        if (activeLeague?.id === 'mlb') {
+          refreshMlbData(true);
+        }
+      }, 30000);
+    }
+
+    function buildStats(league, teamName) {
+      const live = league.id === 'mlb' ? getMlbLive(teamName) : null;
+      const seed = hashText(`${league.id}-${teamName}`);
+      const games = league.sport === 'Baseball' ? 162 : league.sport === 'Football' ? 17 : league.sport === 'Soccer' ? 34 : 82;
+      const draws = league.sport === 'Soccer' ? seed % 8 : 0;
+      const wins = Math.max(1, Math.min(games - draws - 1, Math.floor(games * (0.34 + (seed % 36) / 100))));
+      const losses = Math.max(0, games - wins - draws);
+      const offense = 70 + (seed % 29);
+      const defense = 66 + ((seed >> 5) % 31);
+      const momentum = 41 + ((seed >> 11) % 57);
+      const opponents = league.teams.filter((team) => team !== teamName);
+      const opponent = opponents[(seed >> 7) % opponents.length];
+      return {
+        record: live?.record || (league.sport === 'Soccer' ? `${wins}-${losses}-${draws}` : `${wins}-${losses}`),
+        winPct: live?.winPct || (wins / games).toFixed(3).replace(/^0/, ''),
+        rank: live?.rank || 1 + (seed % league.teams.length),
+        streak: live?.streak || `${seed % 3 === 1 ? 'L' : 'W'}${1 + (seed % 5)}`,
+        offense,
+        defense,
+        momentum,
+        nextGame: live?.nextGame || `vs ${opponent}`,
+        nextGameTime: live?.nextGameTime || '',
+        broadcast: live?.broadcast || ['Local TV', 'National Stream', 'Prime Time', 'Radio + App'][seed % 4],
+        alertTime: live?.alertTime || ['2 hours before', '30 minutes before', 'at game start', 'final score'][seed % 4],
+        form: live?.form || ['Hot', 'Steady', 'Clutch', 'Building', 'Dangerous'][seed % 5],
+        source: live?.source || 'Projected demo stats',
+        status: live?.status || ''
+      };
+    }
+
+    function isFollowing(league, teamName) {
+      return subscriptions.some((item) => item.league === league.id && item.team === teamName);
+    }
+
+    function setHeader(nextKicker, title, subtitle) {
+      kicker.textContent = nextKicker;
+      pageTitle.textContent = title;
+      pageSubtitle.textContent = subtitle;
+      backButton.classList.toggle('hidden', view === 'leagues');
+      search.classList.toggle('hidden', view !== 'teams');
+      if (view !== 'teams') {
+        search.value = '';
+      }
+    }
+
+    function makeChip(text, color) {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      chip.style.setProperty('--chip-color', color);
+      chip.textContent = text;
+      return chip;
+    }
+
+    function renderLeagues() {
+      view = 'leagues';
+      activeLeague = null;
+      activeTeam = null;
+      setHeader('League folders', 'Sports Central', 'Pick a league to open every team.');
+      content.innerHTML = '';
+
+      const grid = document.createElement('section');
+      grid.className = 'grid';
+
+      leagues.forEach((league) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'card';
+        card.addEventListener('click', () => renderTeams(league));
+
+        const top = document.createElement('div');
+        const emoji = document.createElement('span');
+        emoji.className = 'emoji';
+        emoji.textContent = league.emoji;
+        const title = document.createElement('span');
+        title.className = 'card-title';
+        title.textContent = league.name;
+        const copy = document.createElement('span');
+        copy.className = 'card-copy';
+        copy.textContent = league.copy;
+        top.append(emoji, title, copy);
+
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+        league.tags.forEach((tag) => chips.append(makeChip(tag, league.color)));
+        card.append(top, chips);
+        grid.append(card);
+      });
+
+      content.append(grid);
+    }
+
+    function renderTeams(league = activeLeague, requestLiveUpdate = true) {
+      view = 'teams';
+      activeLeague = league;
+      activeTeam = null;
+      const query = search.value.trim().toLowerCase();
+      const teams = league.teams.filter((team) => team.toLowerCase().includes(query));
+      const liveNote = league.id === 'mlb'
+        ? ` Live regular-season data refreshes every 30 seconds${mlbLastUpdated ? `; last update ${new Date(mlbLastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.` : '.'}`
+        : '';
+      setHeader('Team folder', league.fullName, `${teams.length} of ${league.teams.length} teams shown. Click a card for stats and follow alerts.${liveNote}`);
+      content.innerHTML = '';
+
+      if (league.id === 'mlb' && requestLiveUpdate) {
+        refreshMlbData(true);
+      }
+
+      const grid = document.createElement('section');
+      grid.className = 'grid';
+
+      teams.forEach((teamName) => {
+        const stats = buildStats(league, teamName);
+        const colors = teamColors(teamName);
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'card';
+        card.addEventListener('click', () => renderDetail(league, teamName));
+
+        const top = document.createElement('div');
+        const badge = document.createElement('span');
+        badge.className = 'emoji';
+        badge.textContent = teamInitials(teamName);
+        badge.style.color = colors[0];
+        const title = document.createElement('span');
+        title.className = 'card-title';
+        title.textContent = teamName;
+        const copy = document.createElement('span');
+        copy.className = 'card-copy';
+        copy.textContent = `${stats.record} season | ${stats.streak} streak | ${stats.nextGame}${stats.nextGameTime ? `, ${stats.nextGameTime}` : ''}`;
+        top.append(badge, title, copy);
+
+        const chips = document.createElement('div');
+        chips.className = 'chips';
+        chips.append(makeChip(`#${stats.rank}`, league.color));
+        chips.append(makeChip(isFollowing(league, teamName) ? 'following' : 'stats', colors[1]));
+        card.append(top, chips);
+        grid.append(card);
+      });
+
+      if (teams.length === 0) {
+        const empty = document.createElement('p');
+        empty.className = 'sub';
+        empty.textContent = 'No teams matched that search.';
+        content.append(empty);
+        return;
+      }
+
+      content.append(grid);
+    }
+
+    function renderDetail(league, teamName, requestLiveUpdate = true) {
+      view = 'detail';
+      activeLeague = league;
+      activeTeam = teamName;
+      const stats = buildStats(league, teamName);
+      const colors = teamColors(teamName);
+      const liveNote = league.id === 'mlb'
+        ? ` | ${stats.source}${mlbLastUpdated ? ` updated ${new Date(mlbLastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ' loading'}`
+        : '';
+      setHeader('Team stats', teamName, `${league.name} | ${stats.nextGame}${stats.nextGameTime ? `, ${stats.nextGameTime}` : ''} | ${stats.broadcast}${liveNote}`);
+      content.innerHTML = '';
+
+      if (league.id === 'mlb' && requestLiveUpdate) {
+        refreshMlbData(true);
+      }
+
+      const detail = document.createElement('section');
+      detail.className = 'detail';
+      detail.style.setProperty('--team-a', colors[0]);
+      detail.style.setProperty('--team-b', colors[1]);
+
+      const hero = document.createElement('div');
+      hero.className = 'team-hero';
+      hero.innerHTML = `
+        <div>
+          <div class="badge">${teamInitials(teamName)}</div>
+          <h2 style="margin-top:18px">${teamName}</h2>
+          <p class="sub">${league.fullName}</p>
+        </div>
+        <div class="chips">
+          <span class="chip" style="--chip-color:${league.color}">${league.sport}</span>
+          <span class="chip" style="--chip-color:${colors[1]}">${isFollowing(league, teamName) ? 'following' : 'not followed'}</span>
+        </div>
+        <div class="toolbar" style="justify-content:flex-start">
+          <button class="primary-button" id="followButton" type="button">${isFollowing(league, teamName) ? 'Update Email' : 'Follow'}</button>
+          <button class="plain-button" id="testEmailButton" type="button">Test Email</button>
+        </div>
+      `;
+
+      const panel = document.createElement('div');
+      panel.className = 'stats-panel';
+      panel.innerHTML = `
+        <div class="stat-grid">
+          <div class="stat"><div class="label">Season Record</div><div class="value">${stats.record}</div></div>
+          <div class="stat"><div class="label">Win Pct</div><div class="value">${stats.winPct}</div></div>
+          <div class="stat"><div class="label">${league.id === 'mlb' ? 'League Rank' : 'Power Rank'}</div><div class="value">#${stats.rank}</div></div>
+          <div class="stat"><div class="label">Streak</div><div class="value">${stats.streak}</div></div>
+        </div>
+        <div class="meter-grid">
+          <div class="meter-box"><div class="label">Offense</div><div class="bar"><span style="width:${stats.offense}%"></span></div><div class="value">${stats.offense}</div></div>
+          <div class="meter-box"><div class="label">Defense</div><div class="bar"><span style="width:${stats.defense}%"></span></div><div class="value">${stats.defense}</div></div>
+          <div class="meter-box"><div class="label">Momentum</div><div class="bar"><span style="width:${stats.momentum}%"></span></div><div class="value">${stats.momentum}</div></div>
+        </div>
+        <div class="matchup">
+          <h3>Next Game</h3>
+          <p class="sub">${stats.nextGame}</p>
+          <p class="sub">${stats.nextGameTime ? `${stats.nextGameTime} | ` : ''}${stats.broadcast} | Alert ${stats.alertTime}</p>
+          <p class="sub">${stats.source}${stats.status ? ` | ${stats.status}` : ''}</p>
+        </div>
+        <div class="matchup">
+          <h3>Followed Teams</h3>
+          <div class="follow-list" id="followList"></div>
+          <p class="sub">This browser saves follows locally. Automatic scheduled emails need a backend email service.</p>
+        </div>
+      `;
+
+      detail.append(hero, panel);
+      content.append(detail);
+      document.getElementById('followButton').addEventListener('click', () => openFollow(league, teamName));
+      document.getElementById('testEmailButton').addEventListener('click', () => testEmail(league, teamName));
+      renderFollowList();
+    }
+
+    function renderFollowList() {
+      const list = document.getElementById('followList');
+      if (!list) {
+        return;
+      }
+      list.innerHTML = '';
+      if (subscriptions.length === 0) {
+        const item = document.createElement('div');
+        item.className = 'follow-item';
+        item.innerHTML = '<strong>No follows yet</strong><span class="sub">Use Follow to save one.</span>';
+        list.append(item);
+        return;
+      }
+
+      subscriptions.slice(-6).reverse().forEach((subscription) => {
+        const item = document.createElement('div');
+        item.className = 'follow-item';
+        item.innerHTML = `<strong>${subscription.team}</strong><span>${subscription.leagueName} | ${subscription.email}</span>`;
+        list.append(item);
+      });
+    }
+
+    function openFollow(league, teamName) {
+      pendingFollowTeam = { league, teamName };
+      const existing = subscriptions.find((item) => item.league === league.id && item.team === teamName);
+      modalTitle.textContent = `Follow ${teamName}`;
+      modalCopy.textContent = 'Enter your email for every game reminder and score alert.';
+      emailInput.value = existing ? existing.email : '';
+      modalBackdrop.classList.add('visible');
+      emailInput.focus();
+    }
+
+    function closeFollow() {
+      pendingFollowTeam = null;
+      modalBackdrop.classList.remove('visible');
+    }
+
+    function saveFollow(league, teamName, email) {
+      const existing = subscriptions.find((item) => item.league === league.id && item.team === teamName);
+      if (existing) {
+        existing.email = email;
+      } else {
+        subscriptions.push({
+          league: league.id,
+          leagueName: league.name,
+          team: teamName,
+          email,
+          createdAt: new Date().toISOString()
+        });
+      }
+      saveSubscriptions();
+      showToast(`${teamName} alerts saved for ${email}.`);
+      renderDetail(league, teamName);
+    }
+
+    function testEmail(league, teamName) {
+      const subscription = subscriptions.find((item) => item.league === league.id && item.team === teamName);
+      if (!subscription) {
+        openFollow(league, teamName);
+        showToast('Add an email first, then send a test alert.');
+        return;
+      }
+
+      const stats = buildStats(league, teamName);
+      const subject = encodeURIComponent(`${teamName} game alert`);
+      const body = encodeURIComponent(`Game alert for ${teamName}\n\nNext game: ${stats.nextGame}${stats.nextGameTime ? `, ${stats.nextGameTime}` : ''}\nBroadcast: ${stats.broadcast}\nReminder: ${stats.alertTime}\nSeason record: ${stats.record}\nSource: ${stats.source}\n\nSports Central local test alert`);
+      window.location.href = `mailto:${encodeURIComponent(subscription.email)}?subject=${subject}&body=${body}`;
+      showToast('Opening your email app with a test alert draft.');
+    }
+
+    function showToast(message) {
+      clearTimeout(toastTimer);
+      toast.textContent = message;
+      toast.classList.add('visible');
+      toastTimer = setTimeout(() => toast.classList.remove('visible'), 3000);
+    }
+
+    backButton.addEventListener('click', () => {
+      if (view === 'detail') {
+        renderTeams(activeLeague);
+      } else {
+        renderLeagues();
+      }
+    });
+
+    search.addEventListener('input', () => {
+      if (activeLeague) {
+        renderTeams(activeLeague);
+      }
+    });
+
+    followForm.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (pendingFollowTeam) {
+        saveFollow(pendingFollowTeam.league, pendingFollowTeam.teamName, emailInput.value.trim());
+      }
+      closeFollow();
+    });
+
+    cancelFollow.addEventListener('click', closeFollow);
+
+    modalBackdrop.addEventListener('click', (event) => {
+      if (event.target === modalBackdrop) {
+        closeFollow();
+      }
+    });
+
+    startLiveRefresh();
+    renderLeagues();
+  </script>
+</body>
+</html>

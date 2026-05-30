@@ -1,0 +1,779 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maze Monster Survival</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #10120f;
+      color: #f8fafc;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+    }
+
+    #game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #121510;
+    }
+
+    .hud,
+    .help,
+    .panel {
+      position: fixed;
+      user-select: none;
+    }
+
+    .hud {
+      top: 14px;
+      left: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .pill {
+      min-width: 92px;
+      padding: 8px 11px;
+      border: 1px solid rgba(255, 255, 255, 0.17);
+      border-radius: 8px;
+      background: rgba(11, 15, 12, 0.72);
+      color: #f8fafc;
+      font-size: 14px;
+      font-weight: 800;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+      backdrop-filter: blur(8px);
+    }
+
+    .help {
+      right: 14px;
+      bottom: 14px;
+      max-width: 320px;
+      padding: 9px 11px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(11, 15, 12, 0.68);
+      color: #d7e4d2;
+      font-size: 13px;
+      line-height: 1.4;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .panel {
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 24px;
+      background: rgba(7, 9, 8, 0.56);
+      pointer-events: auto;
+    }
+
+    .panel.visible {
+      display: grid;
+    }
+
+    .card {
+      width: min(440px, 92vw);
+      padding: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 8px;
+      background: rgba(18, 24, 20, 0.94);
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+      text-align: center;
+      backdrop-filter: blur(12px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: #d3ddcf;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    button {
+      height: 42px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 7px;
+      background: #eab308;
+      color: #221a00;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    @media (max-width: 700px) {
+      .hud {
+        right: 14px;
+      }
+
+      .pill {
+        min-width: 78px;
+        font-size: 13px;
+      }
+
+      .help {
+        left: 14px;
+        right: 14px;
+        max-width: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="Maze Monster Survival game"></canvas>
+
+  <div class="hud" aria-hidden="true">
+    <div class="pill">Level <span id="levelHud">1</span>/10</div>
+    <div class="pill">Time <span id="timeHud">25</span>s</div>
+    <div class="pill">Best <span id="bestHud">1</span></div>
+  </div>
+
+  <div class="help" aria-hidden="true">Move with arrow keys or WASD. On touch screens, drag anywhere. Survive until the clock reaches zero.</div>
+
+  <div class="panel visible" id="startPanel">
+    <div class="card">
+      <h1>Maze Monster Survival</h1>
+      <p>Five monsters hunt you through a maze. Stay away until the clock runs out to clear each level. All 10 levels get faster and longer.</p>
+      <button id="startButton" type="button">Start Level 1</button>
+    </div>
+  </div>
+
+  <div class="panel" id="messagePanel">
+    <div class="card">
+      <h1 id="messageTitle">Caught</h1>
+      <p id="messageText">Try again.</p>
+      <button id="messageButton" type="button">Retry</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const levelHud = document.getElementById('levelHud');
+    const timeHud = document.getElementById('timeHud');
+    const bestHud = document.getElementById('bestHud');
+    const startPanel = document.getElementById('startPanel');
+    const messagePanel = document.getElementById('messagePanel');
+    const messageTitle = document.getElementById('messageTitle');
+    const messageText = document.getElementById('messageText');
+    const messageButton = document.getElementById('messageButton');
+    const startButton = document.getElementById('startButton');
+
+    const cols = 21;
+    const rows = 15;
+    const keys = new Set();
+    const monsterColors = ['#ef4444', '#f97316', '#a855f7', '#06b6d4', '#84cc16'];
+    const bestLevelKey = 'mazeMonsterBestLevel';
+
+    let cellSize = 32;
+    let mazeLeft = 0;
+    let mazeTop = 0;
+    let level = 1;
+    let bestLevel = Number(localStorage.getItem(bestLevelKey) || 1);
+    let duration = 25;
+    let timeLeft = duration;
+    let lastTime = performance.now();
+    let running = false;
+    let maze = [];
+    let player;
+    let monsters = [];
+    let touchVector = { x: 0, y: 0 };
+
+    function resize() {
+      const pixelRatio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(window.innerWidth * pixelRatio);
+      canvas.height = Math.floor(window.innerHeight * pixelRatio);
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+
+      cellSize = Math.floor(Math.min(window.innerWidth / (cols + 2), window.innerHeight / (rows + 2)));
+      mazeLeft = Math.floor((window.innerWidth - cols * cellSize) / 2);
+      mazeTop = Math.floor((window.innerHeight - rows * cellSize) / 2);
+    }
+
+    function makeMaze() {
+      maze = Array.from({ length: rows }, () => Array.from({ length: cols }, () => 1));
+
+      function carve(x, y) {
+        maze[y][x] = 0;
+        const dirs = shuffle([[2, 0], [-2, 0], [0, 2], [0, -2]]);
+
+        dirs.forEach(([dx, dy]) => {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (ny > 0 && ny < rows - 1 && nx > 0 && nx < cols - 1 && maze[ny][nx] === 1) {
+            maze[y + dy / 2][x + dx / 2] = 0;
+            carve(nx, ny);
+          }
+        });
+      }
+
+      carve(1, 1);
+
+      for (let y = 2; y < rows - 2; y += 2) {
+        for (let x = 2; x < cols - 2; x += 2) {
+          if (Math.random() < 0.27 + level * 0.014) {
+            maze[y][x] = 0;
+          }
+        }
+      }
+
+      for (let y = 1; y < rows - 1; y += 1) {
+        for (let x = 1; x < cols - 1; x += 1) {
+          if (maze[y][x] === 1 && Math.random() < 0.11 + level * 0.005) {
+            const openNeighbors = [
+              maze[y][x - 1],
+              maze[y][x + 1],
+              maze[y - 1][x],
+              maze[y + 1][x]
+            ].filter((cell) => cell === 0).length;
+
+            if (openNeighbors >= 2) {
+              maze[y][x] = 0;
+            }
+          }
+        }
+      }
+
+      maze[1][1] = 0;
+      maze[1][2] = 0;
+      maze[2][1] = 0;
+      maze[2][2] = 0;
+      maze[rows - 2][cols - 2] = 0;
+    }
+
+    function shuffle(items) {
+      for (let i = items.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [items[i], items[j]] = [items[j], items[i]];
+      }
+      return items;
+    }
+
+    function startLevel(nextLevel) {
+      level = nextLevel;
+      duration = 20 + level * 5;
+      timeLeft = duration;
+      makeMaze();
+
+      player = {
+        x: cellCenterX(1),
+        y: cellCenterY(1),
+        radius: Math.max(8, cellSize * 0.27),
+        speed: Math.max(145, cellSize * 5.2)
+      };
+
+      const starts = [
+        [cols - 2, rows - 2],
+        [cols - 2, 1],
+        [1, rows - 2],
+        [cols - 4, rows - 4],
+        [Math.floor(cols / 2) | 1, rows - 2]
+      ];
+
+      monsters = starts.map(([cx, cy], index) => ({
+        x: cellCenterX(cx),
+        y: cellCenterY(cy),
+        targetX: cellCenterX(cx),
+        targetY: cellCenterY(cy),
+        radius: Math.max(9, cellSize * 0.29),
+        speed: Math.max(82, cellSize * (2.05 + level * 0.16 + index * 0.045)),
+        color: monsterColors[index],
+        dir: [0, 0],
+        nextThinkAt: 0,
+        scatterUntil: performance.now() + 1200 + index * 220,
+        wobble: Math.random() * Math.PI * 2
+      }));
+
+      running = true;
+      lastTime = performance.now();
+      startPanel.classList.remove('visible');
+      messagePanel.classList.remove('visible');
+      updateHud();
+    }
+
+    function cellCenterX(cx) {
+      return mazeLeft + cx * cellSize + cellSize / 2;
+    }
+
+    function cellCenterY(cy) {
+      return mazeTop + cy * cellSize + cellSize / 2;
+    }
+
+    function worldToCell(x, y) {
+      return {
+        x: Math.floor((x - mazeLeft) / cellSize),
+        y: Math.floor((y - mazeTop) / cellSize)
+      };
+    }
+
+    function isWallCell(cx, cy) {
+      return cy < 0 || cy >= rows || cx < 0 || cx >= cols || maze[cy][cx] === 1;
+    }
+
+    function canStand(x, y, radius) {
+      const minX = Math.floor((x - radius - mazeLeft) / cellSize);
+      const maxX = Math.floor((x + radius - mazeLeft) / cellSize);
+      const minY = Math.floor((y - radius - mazeTop) / cellSize);
+      const maxY = Math.floor((y + radius - mazeTop) / cellSize);
+
+      for (let cy = minY; cy <= maxY; cy += 1) {
+        for (let cx = minX; cx <= maxX; cx += 1) {
+          if (isWallCell(cx, cy)) return false;
+        }
+      }
+
+      return true;
+    }
+
+    function moveEntity(entity, dx, dy) {
+      if (dx !== 0 && canStand(entity.x + dx, entity.y, entity.radius)) {
+        entity.x += dx;
+      }
+      if (dy !== 0 && canStand(entity.x, entity.y + dy, entity.radius)) {
+        entity.y += dy;
+      }
+    }
+
+    function updatePlayer(dt) {
+      let dx = 0;
+      let dy = 0;
+
+      if (keys.has('ArrowLeft') || keys.has('a')) dx -= 1;
+      if (keys.has('ArrowRight') || keys.has('d')) dx += 1;
+      if (keys.has('ArrowUp') || keys.has('w')) dy -= 1;
+      if (keys.has('ArrowDown') || keys.has('s')) dy += 1;
+
+      dx += touchVector.x;
+      dy += touchVector.y;
+
+      const length = Math.hypot(dx, dy);
+      if (length > 0) {
+        moveEntity(player, (dx / length) * player.speed * dt, (dy / length) * player.speed * dt);
+      }
+    }
+
+    function updateMonsters(dt) {
+      const target = worldToCell(player.x, player.y);
+      const now = performance.now();
+
+      monsters.forEach((monster, index) => {
+        const current = worldToCell(monster.x, monster.y);
+        const reachedTarget = Math.hypot(monster.x - monster.targetX, monster.y - monster.targetY) < Math.max(2, monster.speed * dt);
+
+        if (reachedTarget && now >= monster.nextThinkAt) {
+          monster.x = monster.targetX;
+          monster.y = monster.targetY;
+          const chasing = now > monster.scatterUntil && index < 3 + Math.floor(level / 3);
+          const nextCell = chasing ? findNextCell(current, target) : findWanderCell(current, monster.dir);
+
+          if (nextCell) {
+            monster.dir = [nextCell.x - current.x, nextCell.y - current.y];
+            monster.targetX = cellCenterX(nextCell.x);
+            monster.targetY = cellCenterY(nextCell.y);
+            monster.nextThinkAt = now + (chasing ? 80 : 280);
+          }
+        }
+
+        const pulse = Math.sin(performance.now() * 0.006 + monster.wobble + index) * 0.04;
+        const dx = monster.targetX - monster.x;
+        const dy = monster.targetY - monster.y;
+        const distance = Math.hypot(dx, dy);
+
+        if (distance > 0) {
+          const step = Math.min(distance, monster.speed * (1 + pulse) * dt);
+          monster.x += (dx / distance) * step;
+          monster.y += (dy / distance) * step;
+        }
+      });
+    }
+
+    function findWanderCell(current, previousDir) {
+      const choices = [
+        { x: current.x + 1, y: current.y, dir: [1, 0] },
+        { x: current.x - 1, y: current.y, dir: [-1, 0] },
+        { x: current.x, y: current.y + 1, dir: [0, 1] },
+        { x: current.x, y: current.y - 1, dir: [0, -1] }
+      ].filter((cell) => !isWallCell(cell.x, cell.y));
+
+      if (choices.length === 0) return null;
+
+      const forward = choices.find((cell) => cell.dir[0] === previousDir[0] && cell.dir[1] === previousDir[1]);
+      if (forward && Math.random() < 0.62) return forward;
+
+      return choices[Math.floor(Math.random() * choices.length)];
+    }
+
+    function findNextCell(start, target) {
+      if (isWallCell(start.x, start.y) || isWallCell(target.x, target.y)) return null;
+      if (start.x === target.x && start.y === target.y) return start;
+
+      const queue = [start];
+      const visited = Array.from({ length: rows }, () => Array(cols).fill(false));
+      const parent = Array.from({ length: rows }, () => Array(cols).fill(null));
+      visited[start.y][start.x] = true;
+
+      for (let i = 0; i < queue.length; i += 1) {
+        const cell = queue[i];
+        const neighbors = [
+          { x: cell.x + 1, y: cell.y },
+          { x: cell.x - 1, y: cell.y },
+          { x: cell.x, y: cell.y + 1 },
+          { x: cell.x, y: cell.y - 1 }
+        ];
+
+        for (const next of neighbors) {
+          if (isWallCell(next.x, next.y) || visited[next.y][next.x]) continue;
+          visited[next.y][next.x] = true;
+          parent[next.y][next.x] = cell;
+
+          if (next.x === target.x && next.y === target.y) {
+            let step = next;
+            while (parent[step.y][step.x] && parent[step.y][step.x] !== start) {
+              step = parent[step.y][step.x];
+            }
+            return step;
+          }
+
+          queue.push(next);
+        }
+      }
+
+      return null;
+    }
+
+    function checkCapture() {
+      return monsters.some((monster) => Math.hypot(player.x - monster.x, player.y - monster.y) < player.radius + monster.radius - 3);
+    }
+
+    function updateHud() {
+      levelHud.textContent = level;
+      timeHud.textContent = Math.ceil(timeLeft);
+      bestHud.textContent = bestLevel;
+    }
+
+    function endLevel(won) {
+      running = false;
+
+      if (won && level === 10) {
+        bestLevel = 10;
+        localStorage.setItem(bestLevelKey, String(bestLevel));
+        messageTitle.textContent = 'You Won';
+        messageText.textContent = 'You survived all 10 levels.';
+        messageButton.textContent = 'Play Again';
+        messageButton.onclick = () => startLevel(1);
+      } else if (won) {
+        bestLevel = Math.max(bestLevel, level + 1);
+        localStorage.setItem(bestLevelKey, String(bestLevel));
+        messageTitle.textContent = 'Level Clear';
+        messageText.textContent = `Level ${level + 1} lasts ${20 + (level + 1) * 5} seconds and the monsters move faster.`;
+        messageButton.textContent = `Start Level ${level + 1}`;
+        messageButton.onclick = () => startLevel(level + 1);
+      } else {
+        messageTitle.textContent = 'Caught';
+        messageText.textContent = `You made it to level ${level}. Keep moving through the open paths.`;
+        messageButton.textContent = 'Retry Level';
+        messageButton.onclick = () => startLevel(level);
+      }
+
+      messagePanel.classList.add('visible');
+      updateHud();
+    }
+
+    function drawBackground() {
+      const backdrop = ctx.createRadialGradient(
+        window.innerWidth * 0.5,
+        window.innerHeight * 0.45,
+        0,
+        window.innerWidth * 0.5,
+        window.innerHeight * 0.45,
+        Math.max(window.innerWidth, window.innerHeight) * 0.75
+      );
+      backdrop.addColorStop(0, '#24311f');
+      backdrop.addColorStop(0.48, '#121910');
+      backdrop.addColorStop(1, '#050705');
+      ctx.fillStyle = backdrop;
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+      ctx.save();
+      ctx.globalAlpha = 0.14;
+      ctx.strokeStyle = '#b7f7a4';
+      ctx.lineWidth = 1;
+      const grid = 36;
+      const drift = (performance.now() * 0.006) % grid;
+      for (let x = (mazeLeft % grid) - grid + drift; x < window.innerWidth + grid; x += grid) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x - 90, window.innerHeight);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.globalAlpha = 0.18;
+      for (let i = 0; i < 18; i += 1) {
+        const x = (i * 173 + performance.now() * 0.015) % (window.innerWidth + 90) - 45;
+        const y = (i * 97) % window.innerHeight;
+        ctx.fillStyle = i % 3 === 0 ? '#facc15' : '#86efac';
+        ctx.beginPath();
+        ctx.arc(x, y, 1.3 + (i % 4) * 0.45, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawMaze() {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.58)';
+      ctx.shadowBlur = 26;
+      ctx.shadowOffsetY = 10;
+      roundedRect(mazeLeft - 6, mazeTop - 6, cols * cellSize + 12, rows * cellSize + 12, 12, '#0b0f0a');
+      ctx.restore();
+
+      const floorGradient = ctx.createLinearGradient(mazeLeft, mazeTop, mazeLeft, mazeTop + rows * cellSize);
+      floorGradient.addColorStop(0, '#22301d');
+      floorGradient.addColorStop(1, '#10170f');
+      ctx.fillStyle = floorGradient;
+      roundedRect(mazeLeft, mazeTop, cols * cellSize, rows * cellSize, 8, floorGradient);
+
+      for (let y = 0; y < rows; y += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          const px = mazeLeft + x * cellSize;
+          const py = mazeTop + y * cellSize;
+          if (maze[y][x] === 1) {
+            const wallGradient = ctx.createLinearGradient(px, py, px, py + cellSize);
+            wallGradient.addColorStop(0, (x + y) % 2 === 0 ? '#66854d' : '#526f45');
+            wallGradient.addColorStop(0.45, '#394d33');
+            wallGradient.addColorStop(1, '#1c2b1e');
+            roundedRect(px + 1, py + 1, cellSize - 2, cellSize - 2, Math.max(3, cellSize * 0.13), wallGradient);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.13)';
+            roundedRect(px + 4, py + 4, cellSize - 8, Math.max(3, cellSize * 0.12), 3, 'rgba(255, 255, 255, 0.13)');
+            ctx.fillStyle = 'rgba(4, 8, 5, 0.24)';
+            ctx.fillRect(px + cellSize - 4, py + 4, 2, cellSize - 8);
+          } else {
+            ctx.fillStyle = (x + y) % 2 === 0 ? 'rgba(20, 32, 18, 0.82)' : 'rgba(28, 42, 23, 0.82)';
+            ctx.fillRect(px, py, cellSize, cellSize);
+            if ((x * 11 + y * 7) % 9 === 0) {
+              ctx.fillStyle = 'rgba(134, 239, 172, 0.18)';
+              ctx.beginPath();
+              ctx.arc(px + cellSize * 0.28, py + cellSize * 0.62, Math.max(1.5, cellSize * 0.045), 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+        }
+      }
+
+      ctx.save();
+      ctx.strokeStyle = '#b6e388';
+      ctx.lineWidth = 3;
+      ctx.shadowColor = '#86efac';
+      ctx.shadowBlur = 8;
+      roundedStroke(mazeLeft + 1.5, mazeTop + 1.5, cols * cellSize - 3, rows * cellSize - 3, 8);
+      ctx.restore();
+    }
+
+    function drawPlayer() {
+      ctx.save();
+      ctx.translate(player.x, player.y);
+      const bob = Math.sin(performance.now() * 0.012) * 2;
+      ctx.translate(0, bob);
+      ctx.shadowColor = 'rgba(250, 204, 21, 0.85)';
+      ctx.shadowBlur = 22;
+      const body = ctx.createRadialGradient(-player.radius * 0.25, -player.radius * 0.35, 2, 0, 0, player.radius * 1.2);
+      body.addColorStop(0, '#fff7ad');
+      body.addColorStop(0.55, '#facc15');
+      body.addColorStop(1, '#d97706');
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.lineWidth = Math.max(2, cellSize * 0.06);
+      ctx.strokeStyle = '#713f12';
+      ctx.stroke();
+      ctx.fillStyle = '#1f2937';
+      ctx.beginPath();
+      ctx.arc(player.radius * 0.34, -player.radius * 0.23, player.radius * 0.15, 0, Math.PI * 2);
+      ctx.arc(player.radius * 0.34, player.radius * 0.23, player.radius * 0.15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.62)';
+      ctx.beginPath();
+      ctx.arc(-player.radius * 0.33, -player.radius * 0.34, player.radius * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawMonster(monster, index) {
+      ctx.save();
+      ctx.translate(monster.x, monster.y);
+      const wobble = Math.sin(performance.now() * 0.01 + index) * monster.radius * 0.08;
+      ctx.translate(0, wobble);
+      ctx.shadowColor = monster.color;
+      ctx.shadowBlur = 20;
+      const skin = ctx.createRadialGradient(-monster.radius * 0.3, -monster.radius * 0.45, 2, 0, 0, monster.radius * 1.25);
+      skin.addColorStop(0, '#ffffff');
+      skin.addColorStop(0.08, monster.color);
+      skin.addColorStop(1, '#111827');
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.arc(0, 0, monster.radius, Math.PI, Math.PI * 2);
+      ctx.lineTo(monster.radius, monster.radius * 0.72);
+      for (let i = 2; i >= -2; i -= 1) {
+        ctx.lineTo(i * monster.radius * 0.25, monster.radius * (i % 2 === 0 ? 0.38 : 0.76));
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.lineWidth = Math.max(2, cellSize * 0.045);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.48)';
+      ctx.stroke();
+      ctx.fillStyle = '#f8fafc';
+      ctx.beginPath();
+      ctx.arc(-monster.radius * 0.34, -monster.radius * 0.12, monster.radius * 0.18, 0, Math.PI * 2);
+      ctx.arc(monster.radius * 0.34, -monster.radius * 0.12, monster.radius * 0.18, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#111827';
+      const look = monster.dir || [0, 0];
+      ctx.beginPath();
+      ctx.arc(-monster.radius * 0.34 + look[0] * 2, -monster.radius * 0.12 + look[1] * 2, monster.radius * 0.08, 0, Math.PI * 2);
+      ctx.arc(monster.radius * 0.34 + look[0] * 2, -monster.radius * 0.12 + look[1] * 2, monster.radius * 0.08, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.52)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(-monster.radius * 0.56, monster.radius * 0.22);
+      ctx.quadraticCurveTo(0, monster.radius * 0.42, monster.radius * 0.56, monster.radius * 0.22);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function roundedRect(x, y, width, height, radius, fillStyle) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.fillStyle = fillStyle;
+      ctx.fill();
+    }
+
+    function roundedStroke(x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+      ctx.stroke();
+    }
+
+    function draw() {
+      drawBackground();
+      drawMaze();
+      monsters.forEach(drawMonster);
+      drawPlayer();
+    }
+
+    function tick(now) {
+      const dt = Math.min((now - lastTime) / 1000, 0.033);
+      lastTime = now;
+
+      if (running) {
+        timeLeft -= dt;
+        updatePlayer(dt);
+        updateMonsters(dt);
+
+        if (checkCapture()) {
+          endLevel(false);
+        } else if (timeLeft <= 0) {
+          timeLeft = 0;
+          endLevel(true);
+        }
+
+        updateHud();
+      }
+
+      draw();
+      requestAnimationFrame(tick);
+    }
+
+    window.addEventListener('resize', () => {
+      resize();
+      if (!running) {
+        makeMaze();
+        player = { x: cellCenterX(1), y: cellCenterY(1), radius: Math.max(8, cellSize * 0.27) };
+        monsters = [];
+      }
+    });
+
+    window.addEventListener('keydown', (event) => {
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      keys.add(key);
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' '].includes(event.key)) {
+        event.preventDefault();
+      }
+    });
+
+    window.addEventListener('keyup', (event) => {
+      const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+      keys.delete(key);
+    });
+
+    canvas.addEventListener('pointerdown', (event) => {
+      canvas.setPointerCapture(event.pointerId);
+      setTouchVector(event);
+    });
+
+    window.addEventListener('pointermove', setTouchVector);
+    window.addEventListener('pointerup', () => {
+      touchVector = { x: 0, y: 0 };
+    });
+
+    function setTouchVector(event) {
+      if (!player || event.pointerType === 'mouse') return;
+      const dx = event.clientX - player.x;
+      const dy = event.clientY - player.y;
+      const distance = Math.hypot(dx, dy);
+      touchVector = distance > 8 ? { x: dx / distance, y: dy / distance } : { x: 0, y: 0 };
+    }
+
+    startButton.addEventListener('click', () => startLevel(1));
+    messageButton.onclick = () => startLevel(level);
+
+    resize();
+    makeMaze();
+    player = { x: cellCenterX(1), y: cellCenterY(1), radius: Math.max(8, cellSize * 0.27) };
+    bestHud.textContent = bestLevel;
+    draw();
+    requestAnimationFrame(tick);
+  </script>
+</body>
+</html>

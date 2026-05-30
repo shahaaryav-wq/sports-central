@@ -1,0 +1,1162 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Skyline Gauntlet</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #0b1018;
+      color: #f7fbff;
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: none;
+    }
+
+    #game {
+      display: block;
+      width: 100vw;
+      height: 100vh;
+      background: #101827;
+    }
+
+    .hud,
+    .help,
+    .panel,
+    .touch {
+      position: fixed;
+      user-select: none;
+    }
+
+    .hud {
+      top: 12px;
+      left: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .pill {
+      min-width: 86px;
+      padding: 7px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.17);
+      border-radius: 8px;
+      background: rgba(7, 12, 20, 0.74);
+      color: #f7fbff;
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(8px);
+    }
+
+    .help {
+      right: 12px;
+      bottom: 12px;
+      max-width: 330px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 8px;
+      background: rgba(7, 12, 20, 0.66);
+      color: #c8d6e8;
+      font-size: 13px;
+      line-height: 1.38;
+      pointer-events: none;
+      backdrop-filter: blur(8px);
+    }
+
+    .panel {
+      inset: 0;
+      display: none;
+      place-items: center;
+      padding: 20px;
+      background: rgba(5, 8, 13, 0.58);
+      pointer-events: auto;
+    }
+
+    .panel.visible {
+      display: grid;
+    }
+
+    .card {
+      width: min(460px, 92vw);
+      padding: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      background: rgba(14, 22, 34, 0.94);
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.48);
+      text-align: center;
+      backdrop-filter: blur(12px);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+      line-height: 1;
+    }
+
+    p {
+      margin: 0 0 16px;
+      color: #cbd7e8;
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    button {
+      height: 42px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 7px;
+      background: #facc15;
+      color: #1c1600;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .touch {
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      display: none;
+      justify-content: space-between;
+      pointer-events: none;
+    }
+
+    .cluster {
+      display: flex;
+      gap: 10px;
+      pointer-events: auto;
+    }
+
+    .touch button {
+      width: 58px;
+      height: 54px;
+      padding: 0;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      background: rgba(15, 24, 38, 0.72);
+      color: #f8fbff;
+      font-size: 22px;
+      backdrop-filter: blur(8px);
+    }
+
+    @media (max-width: 840px), (pointer: coarse) {
+      .help {
+        display: none;
+      }
+
+      .touch {
+        display: flex;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game" aria-label="A 15 level platformer with hazards and moving platforms"></canvas>
+
+  <div class="hud">
+    <div class="pill" id="levelHud">Level 1 / 15</div>
+    <div class="pill" id="deathsHud">Deaths 0</div>
+    <div class="pill" id="timeHud">0:00</div>
+  </div>
+
+  <div class="help">Move with A/D or arrow keys. Jump with W, Up, or Space. Reach the green gate. Yellow pads bounce, red hazards reset you, blue platforms move, purple portals shift you, and gray blocks crumble.</div>
+
+  <div class="panel visible" id="panel">
+    <div class="card">
+      <h1 id="panelTitle">Skyline Gauntlet</h1>
+      <p id="panelText">Beat 15 fixed platforming levels. Every trampoline and moving platform is placed on the route, with harder hazards, tighter landings, lava, spikes, portals, crumbling blocks, and patrol hazards.</p>
+      <button id="panelButton" type="button">Start</button>
+    </div>
+  </div>
+
+  <div class="touch" aria-hidden="true">
+    <div class="cluster">
+      <button data-key="ArrowLeft" type="button">L</button>
+      <button data-key="ArrowRight" type="button">R</button>
+    </div>
+    <div class="cluster">
+      <button data-key="KeyR" type="button">Rst</button>
+      <button data-key="Space" type="button">Jmp</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const levelHud = document.getElementById('levelHud');
+    const deathsHud = document.getElementById('deathsHud');
+    const timeHud = document.getElementById('timeHud');
+    const panel = document.getElementById('panel');
+    const panelTitle = document.getElementById('panelTitle');
+    const panelText = document.getElementById('panelText');
+    const panelButton = document.getElementById('panelButton');
+
+    const TILE = 40;
+    const WORLD_W = 1280;
+    const WORLD_H = 720;
+    const GRAVITY = 2150;
+    const keys = new Set();
+    const state = {
+      levelIndex: 0,
+      deaths: 0,
+      startedAt: performance.now(),
+      paused: true,
+      complete: false,
+      cameraX: 0,
+      cameraY: 0
+    };
+
+    const player = {
+      x: 80,
+      y: 120,
+      w: 27,
+      h: 36,
+      vx: 0,
+      vy: 0,
+      grounded: false,
+      coyote: 0,
+      jumpBuffer: 0,
+      onMover: null,
+      spawnX: 80,
+      spawnY: 120
+    };
+
+    function rect(x, y, w, h, type = 'solid', extra = {}) {
+      return { x, y, w, h, type, ...extra };
+    }
+
+    const LEVEL_SPECS = [
+      {
+        name: 'Grassline Warmup',
+        route: [[82, 604, 86], [236, 580, 86], [390, 552, 82], [548, 526, 78], [704, 498, 78], [862, 470, 74], [1020, 442, 72]],
+        hazards: [[318, 650, 44, 'spike'], [620, 650, 44, 'spike'], [900, 650, 64, 'lava']],
+        goal: [1148, 362]
+      },
+      {
+        name: 'Spring Floor',
+        route: [[78, 604, 86], [296, 560, 78], [500, 505, 76], [704, 452, 72], [918, 400, 68], [1108, 350, 72]],
+        trampolines: [[180, 656, 990], [395, 536, 940], [610, 482, 920]],
+        hazards: [[238, 650, 70, 'spike'], [452, 650, 82, 'spike'], [660, 650, 120, 'lava'], [842, 650, 80, 'spike']],
+        goal: [1162, 270]
+      },
+      {
+        name: 'Moving Bridge',
+        route: [[74, 604, 86], [234, 570, 78], [772, 516, 74], [936, 484, 70], [1104, 444, 72]],
+        movers: [[398, 540, 94, 0, 70, 1.1], [596, 518, 96, 82, 0, 1.2]],
+        hazards: [[325, 650, 110, 'lava'], [548, 650, 132, 'lava'], [820, 650, 82, 'spike']],
+        goal: [1160, 364]
+      },
+      {
+        name: 'Lava Ladders',
+        route: [[80, 604, 82], [232, 582, 74], [380, 548, 72], [526, 514, 70], [674, 480, 68], [824, 446, 66], [980, 412, 64], [1126, 378, 70]],
+        trampolines: [[455, 656, 1010]],
+        hazards: [[280, 650, 94, 'lava'], [595, 650, 112, 'lava'], [884, 650, 144, 'lava'], [766, 426, 28, 'spike']],
+        saws: [[650, 585, 18, 145, 0, 1.3]],
+        goal: [1170, 298]
+      },
+      {
+        name: 'Elevator Route',
+        route: [[78, 604, 78], [226, 578, 70], [422, 524, 68], [870, 412, 64], [1042, 374, 62], [1160, 338, 62]],
+        movers: [[330, 552, 80, 0, 74, 1.2], [620, 482, 88, 0, 108, 1.0], [760, 446, 78, 84, 0, 1.35]],
+        hazards: [[170, 650, 64, 'spike'], [500, 650, 160, 'lava'], [708, 650, 132, 'spike'], [930, 650, 128, 'lava']],
+        goal: [1190, 258]
+      },
+      {
+        name: 'Crumble Climb',
+        route: [[78, 604, 76], [224, 574, 68], [368, 542, 64], [792, 434, 60], [948, 396, 58], [1104, 354, 60]],
+        crumble: [[506, 508, 64], [642, 470, 62]],
+        trampolines: [[282, 656, 980]],
+        hazards: [[184, 650, 56, 'spike'], [430, 650, 126, 'lava'], [704, 650, 142, 'lava'], [1010, 650, 96, 'spike']],
+        saws: [[650, 420, 17, 0, 78, 1.4]],
+        goal: [1160, 274]
+      },
+      {
+        name: 'Patrol Timing',
+        route: [[78, 604, 74], [224, 578, 64], [370, 548, 60], [520, 518, 58], [676, 488, 56], [836, 456, 56], [1000, 424, 56], [1148, 390, 60]],
+        hazards: [[298, 650, 64, 'spike'], [602, 650, 88, 'lava'], [910, 650, 120, 'spike']],
+        saws: [[455, 506, 17, 106, 0, 1.65], [850, 442, 18, 0, 92, 1.5]],
+        goal: [1182, 310]
+      },
+      {
+        name: 'Portal Steps',
+        route: [[76, 604, 72], [222, 574, 64], [366, 538, 58], [508, 502, 58], [882, 398, 58], [1030, 360, 56], [1168, 324, 58]],
+        portals: [[620, 482, 860, 352], [858, 352, 620, 482]],
+        hazards: [[280, 650, 96, 'lava'], [478, 650, 108, 'spike'], [730, 650, 210, 'lava'], [978, 650, 96, 'spike']],
+        saws: [[748, 420, 18, 0, 88, 1.55]],
+        goal: [1192, 244]
+      },
+      {
+        name: 'Needle Platforms',
+        route: [[80, 604, 68], [218, 582, 58], [354, 552, 54], [490, 520, 52], [626, 488, 50], [762, 456, 50], [900, 424, 48], [1040, 392, 48], [1168, 358, 54]],
+        trampolines: [[145, 656, 910], [842, 656, 1040]],
+        hazards: [[252, 650, 50, 'spike'], [390, 650, 50, 'spike'], [528, 650, 50, 'spike'], [666, 650, 50, 'spike'], [984, 650, 86, 'lava']],
+        saws: [[572, 505, 16, 0, 64, 1.7], [1016, 376, 16, 72, 0, 1.8]],
+        goal: [1190, 278]
+      },
+      {
+        name: 'Sky Conveyor',
+        route: [[76, 604, 68], [224, 574, 58], [720, 484, 52], [866, 448, 50], [1012, 412, 48], [1156, 376, 52]],
+        movers: [[342, 540, 72, 116, 0, 1.5], [528, 508, 72, 0, 94, 1.25], [640, 486, 68, 98, 0, 1.65]],
+        hazards: [[162, 650, 64, 'spike'], [438, 650, 160, 'lava'], [746, 650, 136, 'lava'], [1065, 650, 72, 'spike']],
+        saws: [[860, 430, 17, 90, 0, 1.9]],
+        goal: [1190, 296]
+      },
+      {
+        name: 'Crosswind Springs',
+        wind: 42,
+        route: [[80, 604, 68], [250, 566, 56], [426, 520, 52], [604, 474, 50], [782, 428, 48], [958, 386, 46], [1132, 346, 52]],
+        trampolines: [[172, 656, 980], [520, 496, 930], [866, 404, 900]],
+        hazards: [[320, 650, 86, 'spike'], [664, 650, 138, 'lava'], [1018, 650, 98, 'spike']],
+        saws: [[706, 454, 17, 0, 88, 1.6]],
+        goal: [1170, 266]
+      },
+      {
+        name: 'Spike Hall',
+        wind: 50,
+        route: [[76, 604, 64], [214, 574, 54], [350, 542, 50], [486, 510, 48], [624, 478, 46], [764, 446, 46], [904, 414, 44], [1044, 382, 44], [1174, 348, 48]],
+        movers: [[570, 492, 56, 80, 0, 1.8]],
+        hazards: [[156, 650, 42, 'spike'], [278, 650, 42, 'spike'], [400, 650, 42, 'spike'], [522, 650, 42, 'spike'], [644, 650, 42, 'spike'], [766, 650, 42, 'spike'], [888, 650, 42, 'spike'], [1010, 650, 42, 'spike']],
+        saws: [[432, 492, 16, 0, 70, 1.8], [820, 430, 18, 110, 0, 1.9]],
+        goal: [1194, 268]
+      },
+      {
+        name: 'Fragile Tower',
+        wind: 58,
+        route: [[78, 604, 62], [214, 572, 50], [1010, 342, 46], [1150, 306, 50]],
+        crumble: [[348, 536, 54], [484, 500, 52], [620, 462, 50], [756, 424, 48], [892, 384, 46]],
+        trampolines: [[150, 656, 1020]],
+        hazards: [[300, 650, 176, 'lava'], [560, 650, 150, 'lava'], [810, 650, 168, 'lava'], [720, 405, 26, 'spike']],
+        saws: [[588, 448, 18, 125, 0, 2.0], [1000, 322, 16, 0, 70, 1.8]],
+        goal: [1180, 226]
+      },
+      {
+        name: 'Lava Clock',
+        wind: 66,
+        route: [[76, 604, 60], [210, 574, 48], [348, 540, 46], [486, 506, 44], [918, 376, 42], [1052, 338, 42], [1174, 300, 46]],
+        movers: [[620, 470, 58, 112, 0, 2.0], [776, 424, 56, 0, 112, 1.65]],
+        trampolines: [[268, 656, 1000]],
+        hazards: [[150, 650, 64, 'spike'], [408, 650, 196, 'lava'], [704, 650, 220, 'lava'], [1004, 650, 96, 'spike'], [960, 358, 24, 'spike']],
+        saws: [[520, 492, 17, 0, 88, 2.0], [884, 410, 18, 105, 0, 2.15]],
+        goal: [1194, 220]
+      },
+      {
+        name: 'Final Gauntlet',
+        wind: 72,
+        start: [76, 584],
+        route: [[74, 620, 58], [206, 584, 44], [340, 548, 42], [474, 512, 40], [608, 476, 40], [742, 440, 38], [876, 404, 38], [1010, 368, 36], [1150, 328, 46]],
+        movers: [[262, 566, 52, 74, 0, 2.15], [540, 494, 52, 0, 88, 1.95], [808, 422, 50, 92, 0, 2.2]],
+        crumble: [[390, 530, 42], [674, 458, 38], [938, 386, 36]],
+        trampolines: [[142, 656, 990], [680, 454, 880]],
+        portals: [[1110, 288, 560, 444], [558, 444, 1110, 288]],
+        hazards: [[170, 650, 52, 'spike'], [300, 650, 52, 'spike'], [430, 650, 52, 'spike'], [560, 650, 52, 'spike'], [690, 650, 52, 'spike'], [820, 650, 52, 'spike'], [950, 650, 52, 'spike'], [1080, 650, 52, 'spike'], [730, 420, 22, 'spike']],
+        saws: [[498, 500, 17, 0, 74, 2.25], [762, 418, 18, 112, 0, 2.35], [1032, 348, 17, 0, 80, 2.2]],
+        goal: [1192, 248]
+      }
+    ];
+
+    function makeLevel(spec, index) {
+      const platforms = [
+        rect(0, 670, 1280, 50),
+        rect(0, 0, 40, 760),
+        rect(1240, 0, 40, 760)
+      ];
+      const hazards = [];
+      const trampolines = [];
+      const movers = [];
+      const crumble = [];
+      const portals = [];
+      const saws = [];
+      const coins = [];
+
+      spec.route.forEach(([x, y, w]) => {
+        const hardWidth = Math.max(40, w - Math.min(16, Math.floor(index * 1.4)));
+        platforms.push(rect(x, y, hardWidth, 18));
+        coins.push({ x: x + hardWidth / 2, y: y - 38 });
+        if (index >= 1) {
+          coins.push({ x: x + hardWidth * 0.25, y: y - 68 });
+        }
+        if (index >= 4) {
+          coins.push({ x: x + hardWidth * 0.75, y: y - 68 });
+        }
+      });
+      (spec.hazards || []).forEach(([x, y, w, type]) => hazards.push(rect(x, y, w, type === 'lava' ? 20 : 20, type)));
+      (spec.trampolines || []).forEach(([x, y, power]) => {
+        trampolines.push(rect(x, y, 46, 14, 'trampoline', { power }));
+        coins.push({ x: x + 23, y: y - 52 });
+        coins.push({ x: x + 23, y: y - 88 });
+      });
+      (spec.movers || []).forEach(([x, y, w]) => {
+        const hardWidth = Math.max(42, w - Math.min(14, Math.floor(index * 1.35)));
+        platforms.push(rect(x, y, hardWidth, 18));
+        coins.push({ x: x + hardWidth / 2, y: y - 38 });
+      });
+      if (index >= 2) {
+        for (let i = 0; i < spec.route.length - 1; i += 1) {
+          const a = spec.route[i];
+          const b = spec.route[i + 1];
+          const gap = b[0] - (a[0] + a[2]);
+          if (gap > 72) {
+            const width = Math.max(38, 54 - Math.min(10, index));
+            const x = a[0] + a[2] + gap / 2 - width / 2;
+            const y = Math.min(a[1], b[1]) - 70;
+            platforms.push(rect(x, y, width, 16));
+            coins.push({ x: x + width / 2, y: y - 32 });
+          }
+        }
+      }
+      (spec.crumble || []).forEach(([x, y, w]) => crumble.push(rect(x, y, w, 18, 'crumble', { timer: 0, broken: 0 })));
+      (spec.portals || []).forEach(([x, y, toX, toY]) => portals.push(rect(x, y, 30, 50, 'portal', { toX, toY, cooldown: 0 })));
+      (spec.saws || []).forEach(([x, y, r, rangeX, rangeY, speed], sawIndex) => {
+        saws.push({ x, y, r: r + (index > 9 ? 1 : 0), baseX: x, baseY: y, rangeX, rangeY, speed: speed + index * 0.035, phase: sawIndex * 1.7 + index * 0.22 });
+      });
+
+      if (index >= 4) {
+        const extraPatrols = Math.min(3, Math.floor((index + 1) / 5));
+        for (let i = 0; i < extraPatrols; i++) {
+          const a = spec.route[1 + i * 2];
+          const b = spec.route[2 + i * 2];
+          if (a && b) {
+            const x = (a[0] + b[0]) / 2 + 32;
+            const y = Math.min(a[1], b[1]) - 24;
+            saws.push({
+              x,
+              y,
+              r: 12 + Math.min(4, index),
+              baseX: x,
+              baseY: y,
+              rangeX: 0,
+              rangeY: 30 + index * 2,
+              speed: 1.35 + index * 0.055,
+              phase: i * 1.4 + index
+            });
+          }
+        }
+      }
+
+      const start = spec.start ? { x: spec.start[0], y: spec.start[1] } : { x: 74, y: 614 };
+      const goal = rect(spec.goal[0], spec.goal[1], 42, 80, 'goal');
+      return {
+        name: spec.name,
+        wind: (spec.wind || 0) + (index >= 8 ? 10 : 0),
+        platforms,
+        hazards,
+        trampolines,
+        movers,
+        crumble,
+        portals,
+        saws,
+        coins,
+        start,
+        goal
+      };
+    }
+
+    const levels = LEVEL_SPECS.map(makeLevel);
+    let level = levels[0];
+
+    function resize() {
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.floor(window.innerWidth * ratio);
+      canvas.height = Math.floor(window.innerHeight * ratio);
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    }
+
+    function resetPlayer(countDeath = true) {
+      if (countDeath) {
+        state.deaths += 1;
+      }
+      player.x = level.start.x;
+      player.y = level.start.y;
+      player.vx = 0;
+      player.vy = 0;
+      player.grounded = false;
+      player.coyote = 0;
+      player.jumpBuffer = 0;
+      player.onMover = null;
+      level.crumble.forEach((block) => {
+        block.timer = 0;
+        block.broken = 0;
+      });
+      updateHud();
+    }
+
+    function loadLevel(index) {
+      state.levelIndex = index;
+      level = levels[index];
+      player.spawnX = level.start.x;
+      player.spawnY = level.start.y;
+      resetPlayer(false);
+    }
+
+    function updateHud() {
+      levelHud.textContent = `Level ${state.levelIndex + 1} / 15`;
+      deathsHud.textContent = `Deaths ${state.deaths}`;
+      const seconds = Math.floor((performance.now() - state.startedAt) / 1000);
+      timeHud.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    }
+
+    function overlap(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function activeSolids() {
+      return level.platforms.concat(level.movers, level.crumble.filter((block) => block.broken <= 0));
+    }
+
+    function moveAxis(axis, dt) {
+      if (axis === 'x') {
+        player.x += player.vx * dt;
+      } else {
+        player.y += player.vy * dt;
+      }
+
+      for (const block of activeSolids()) {
+        if (!overlap(player, block)) {
+          continue;
+        }
+        if (axis === 'x') {
+          if (player.vx > 0) {
+            player.x = block.x - player.w;
+          } else if (player.vx < 0) {
+            player.x = block.x + block.w;
+          }
+          player.vx = 0;
+        } else {
+          if (player.vy > 0) {
+            player.y = block.y - player.h;
+            player.grounded = true;
+            player.coyote = 0.1;
+            if (block.type === 'mover') {
+              player.onMover = block;
+            }
+            if (block.type === 'crumble' && block.timer <= 0) {
+              block.timer = 0.56;
+            }
+          } else if (player.vy < 0) {
+            player.y = block.y + block.h;
+          }
+          player.vy = 0;
+        }
+      }
+    }
+
+    function updateMovers(dt, time) {
+      for (const mover of level.movers) {
+        const oldX = mover.x;
+        const oldY = mover.y;
+        mover.x = mover.baseX + Math.sin(time * mover.speed + mover.phase) * mover.rangeX;
+        mover.y = mover.baseY + Math.sin(time * mover.speed + mover.phase) * mover.rangeY;
+        mover.dx = mover.x - oldX;
+        mover.dy = mover.y - oldY;
+      }
+      for (const saw of level.saws) {
+        saw.x = saw.baseX + Math.sin(time * saw.speed + saw.phase) * saw.rangeX;
+        saw.y = saw.baseY + Math.cos(time * saw.speed + saw.phase) * saw.rangeY;
+      }
+    }
+
+    function update(dt, now) {
+      const time = now / 1000;
+      updateMovers(dt, time);
+      updateHud();
+
+      player.grounded = false;
+      player.onMover = null;
+      player.jumpBuffer = Math.max(0, player.jumpBuffer - dt);
+      player.coyote = Math.max(0, player.coyote - dt);
+
+      const left = keys.has('ArrowLeft') || keys.has('KeyA');
+      const right = keys.has('ArrowRight') || keys.has('KeyD');
+      const jump = keys.has('Space') || keys.has('ArrowUp') || keys.has('KeyW');
+      if (jump) {
+        player.jumpBuffer = 0.14;
+      }
+
+      const acceleration = player.grounded ? 4800 : 3100;
+      const maxSpeed = 280 + Math.min(state.levelIndex, 8) * 7;
+      if (left) {
+        player.vx -= acceleration * dt;
+      }
+      if (right) {
+        player.vx += acceleration * dt;
+      }
+      if (!left && !right) {
+        const friction = player.grounded ? 0.79 : 0.96;
+        player.vx *= Math.pow(friction, dt * 60);
+      }
+      player.vx += level.wind * dt;
+      player.vx = Math.max(-maxSpeed, Math.min(maxSpeed, player.vx));
+      player.vy += GRAVITY * dt;
+      player.vy = Math.min(player.vy, 980);
+
+      if (player.jumpBuffer > 0 && (player.grounded || player.coyote > 0)) {
+        player.vy = -750;
+        player.jumpBuffer = 0;
+        player.grounded = false;
+        player.coyote = 0;
+      }
+
+      moveAxis('x', dt);
+      moveAxis('y', dt);
+
+      if (player.onMover && player.grounded) {
+        player.x += player.onMover.dx || 0;
+        player.y += player.onMover.dy || 0;
+      }
+
+      for (const pad of level.trampolines) {
+        if (overlap(player, pad) && player.vy >= 0) {
+          player.y = pad.y - player.h;
+          player.vy = -pad.power;
+          player.grounded = false;
+        }
+      }
+
+      for (const block of level.crumble) {
+        if (block.timer > 0) {
+          block.timer -= dt;
+          if (block.timer <= 0) {
+            block.broken = 2.1;
+          }
+        } else if (block.broken > 0) {
+          block.broken -= dt;
+          if (block.broken <= 0) {
+            block.timer = 0;
+          }
+        }
+      }
+
+      for (const portal of level.portals) {
+        portal.cooldown = Math.max(0, portal.cooldown - dt);
+        if (portal.cooldown <= 0 && overlap(player, portal)) {
+          player.x = portal.toX;
+          player.y = portal.toY;
+          player.vx *= 0.6;
+          player.vy = -220;
+          level.portals.forEach((other) => {
+            other.cooldown = 0.75;
+          });
+        }
+      }
+
+      for (const hazard of level.hazards) {
+        if (overlap(player, hazard)) {
+          resetPlayer(true);
+          return;
+        }
+      }
+
+      for (const saw of level.saws) {
+        const cx = player.x + player.w / 2;
+        const cy = player.y + player.h / 2;
+        const dx = cx - saw.x;
+        const dy = cy - saw.y;
+        if (Math.hypot(dx, dy) < saw.r + 16) {
+          resetPlayer(true);
+          return;
+        }
+      }
+
+      if (player.y > WORLD_H + 160) {
+        resetPlayer(true);
+        return;
+      }
+
+      if (player.x + player.w >= level.goal.x) {
+        if (state.levelIndex === levels.length - 1) {
+          finishGame();
+        } else {
+          loadLevel(state.levelIndex + 1);
+        }
+      }
+
+      const viewW = window.innerWidth;
+      const viewH = window.innerHeight;
+      const scale = Math.min(viewW / 960, viewH / 540);
+      const visibleW = viewW / scale;
+      const visibleH = viewH / scale;
+      state.cameraX += (player.x + player.w / 2 - visibleW / 2 - state.cameraX) * 0.12;
+      state.cameraY += (player.y + player.h / 2 - visibleH / 2 - state.cameraY) * 0.08;
+      state.cameraX = Math.max(0, Math.min(WORLD_W - visibleW, state.cameraX));
+      state.cameraY = Math.max(0, Math.min(WORLD_H - visibleH, state.cameraY));
+    }
+
+    function drawRect(block, color, stroke) {
+      ctx.fillStyle = color;
+      ctx.fillRect(block.x, block.y, block.w, block.h);
+      if (stroke) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(block.x + 1, block.y + 1, block.w - 2, block.h - 2);
+      }
+    }
+
+    function roundRect(x, y, w, h, r) {
+      const radius = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + w - radius, y);
+      ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+      ctx.lineTo(x + w, y + h - radius);
+      ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+      ctx.lineTo(x + radius, y + h);
+      ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+
+    function drawPlatform(block) {
+      if (block.h > 50) {
+        const base = ctx.createLinearGradient(0, block.y, 0, block.y + block.h);
+        base.addColorStop(0, '#8b5a22');
+        base.addColorStop(0.45, '#744817');
+        base.addColorStop(1, '#4b2e10');
+        ctx.fillStyle = base;
+        ctx.fillRect(block.x, block.y, block.w, block.h);
+        ctx.fillStyle = 'rgba(255, 245, 190, 0.08)';
+        ctx.fillRect(block.x, block.y, block.w, 10);
+        ctx.fillStyle = 'rgba(54, 31, 10, 0.36)';
+        for (let y = block.y + 18; y < block.y + block.h; y += 30) {
+          ctx.fillRect(block.x, y, block.w, 2);
+        }
+        for (let x = block.x + 18; x < block.x + block.w; x += 34) {
+          ctx.fillRect(x, block.y + 8, 2, block.h - 10);
+        }
+        return;
+      }
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(44, 79, 24, 0.28)';
+      ctx.shadowBlur = 12;
+      ctx.shadowOffsetY = 8;
+      roundRect(block.x - 2, block.y - 3, block.w + 4, block.h + 26, 4);
+      ctx.fillStyle = '#8b5a22';
+      ctx.fill();
+      ctx.restore();
+
+      const dirt = ctx.createLinearGradient(0, block.y + 5, 0, block.y + block.h + 24);
+      dirt.addColorStop(0, '#a66b27');
+      dirt.addColorStop(0.65, '#7a4b1b');
+      dirt.addColorStop(1, '#4f3011');
+      roundRect(block.x, block.y + 5, block.w, block.h + 22, 3);
+      ctx.fillStyle = dirt;
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(62, 35, 11, 0.28)';
+      for (let x = block.x + 12; x < block.x + block.w; x += 22) {
+        ctx.fillRect(x, block.y + 8, 2, block.h + 18);
+      }
+      for (let y = block.y + 18; y < block.y + block.h + 24; y += 17) {
+        ctx.fillRect(block.x + 4, y, block.w - 8, 1);
+      }
+
+      const grass = ctx.createLinearGradient(0, block.y - 8, 0, block.y + 9);
+      grass.addColorStop(0, '#a7f35b');
+      grass.addColorStop(0.55, '#62c83a');
+      grass.addColorStop(1, '#348e28');
+      roundRect(block.x - 4, block.y - 8, block.w + 8, 17, 5);
+      ctx.fillStyle = grass;
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.fillRect(block.x + 4, block.y - 5, block.w - 8, 2);
+      ctx.strokeStyle = 'rgba(30, 101, 30, 0.72)';
+      ctx.lineWidth = 2;
+      for (let x = block.x + 5; x < block.x + block.w - 3; x += 12) {
+        ctx.beginPath();
+        ctx.moveTo(x, block.y - 5);
+        ctx.lineTo(x + 4, block.y - 15);
+        ctx.stroke();
+      }
+    }
+
+    function drawBackground() {
+      const sky = ctx.createLinearGradient(0, 0, 0, WORLD_H);
+      sky.addColorStop(0, '#45bff0');
+      sky.addColorStop(0.42, '#9de7f5');
+      sky.addColorStop(0.76, '#dff7e7');
+      sky.addColorStop(1, '#f5f7d8');
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+      const sunX = 1120;
+      const sunY = 118;
+      const sunGlow = ctx.createRadialGradient(sunX, sunY, 20, sunX, sunY, 150);
+      sunGlow.addColorStop(0, 'rgba(255,255,205,0.9)');
+      sunGlow.addColorStop(0.4, 'rgba(250,204,21,0.42)');
+      sunGlow.addColorStop(1, 'rgba(250,204,21,0)');
+      ctx.fillStyle = sunGlow;
+      ctx.fillRect(sunX - 170, sunY - 170, 340, 340);
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.arc(sunX, sunY, 56, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff7ad';
+      ctx.beginPath();
+      ctx.arc(sunX - 16, sunY - 18, 24, 0, Math.PI * 2);
+      ctx.fill();
+
+      function cloud(x, y, scale) {
+        ctx.save();
+        ctx.shadowColor = 'rgba(70, 130, 160, 0.16)';
+        ctx.shadowBlur = 16 * scale;
+        ctx.fillStyle = 'rgba(255,255,255,0.68)';
+        for (const [ox, oy, r] of [[0, 10, 22], [28, 0, 28], [60, 8, 24], [90, 14, 20]]) {
+          ctx.beginPath();
+          ctx.arc(x + ox * scale, y + oy * scale, r * scale, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+      cloud(178, 118, 0.9);
+      cloud(710, 88, 1.18);
+      cloud(1034, 178, 0.96);
+      cloud(700, 185, 0.72);
+      cloud(330, 305, 0.58);
+      cloud(930, 285, 0.65);
+
+      ctx.fillStyle = 'rgba(67, 154, 95, 0.14)';
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        const x = i * 260 - 70;
+        ctx.moveTo(x, 670);
+        ctx.lineTo(x + 190, 440 + (i % 2) * 54);
+        ctx.lineTo(x + 440, 670);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      const hill = ctx.createLinearGradient(0, 470, 0, 700);
+      hill.addColorStop(0, 'rgba(96, 182, 105, 0.26)');
+      hill.addColorStop(1, 'rgba(96, 182, 105, 0.06)');
+      ctx.fillStyle = hill;
+      ctx.beginPath();
+      ctx.moveTo(0, 640);
+      for (let x = 0; x <= WORLD_W; x += 70) {
+        ctx.lineTo(x, 612 + Math.sin(x / 105) * 26 + Math.cos(x / 63) * 11);
+      }
+      ctx.lineTo(WORLD_W, WORLD_H);
+      ctx.lineTo(0, WORLD_H);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(70, 142, 75, 0.28)';
+      for (let i = 0; i < 10; i++) {
+        const x = 80 + i * 130;
+        const y = 604 + (i % 3) * 14;
+        ctx.fillRect(x + 16, y, 8, 58);
+        ctx.beginPath();
+        ctx.arc(x + 20, y - 10, 25, 0, Math.PI * 2);
+        ctx.arc(x + 4, y - 2, 17, 0, Math.PI * 2);
+        ctx.arc(x + 35, y - 2, 17, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.24)';
+      for (let i = 0; i < 26; i++) {
+        const x = (i * 97 + state.levelIndex * 31) % WORLD_W;
+        const y = 52 + (i * 43) % 350;
+        ctx.beginPath();
+        ctx.arc(x, y, 2 + (i % 3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawSpikes(hazard) {
+      for (let x = hazard.x; x < hazard.x + hazard.w; x += 15) {
+        const spike = ctx.createLinearGradient(0, hazard.y, 0, hazard.y + hazard.h);
+        spike.addColorStop(0, '#f8fafc');
+        spike.addColorStop(0.48, '#a5b4fc');
+        spike.addColorStop(1, '#475569');
+        ctx.fillStyle = spike;
+        ctx.beginPath();
+        ctx.moveTo(x, hazard.y + hazard.h);
+        ctx.lineTo(x + 7.5, hazard.y);
+        ctx.lineTo(x + 15, hazard.y + hazard.h);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.32)';
+        ctx.stroke();
+      }
+    }
+
+    function draw(now) {
+      const viewW = window.innerWidth;
+      const viewH = window.innerHeight;
+      ctx.clearRect(0, 0, viewW, viewH);
+      const scale = Math.min(viewW / 960, viewH / 540);
+      ctx.save();
+      ctx.scale(scale, scale);
+      ctx.translate(-state.cameraX, -state.cameraY);
+      drawBackground();
+
+      for (const hazard of level.hazards) {
+        if (hazard.type === 'spike') {
+          drawSpikes(hazard);
+        } else {
+          ctx.save();
+          ctx.shadowColor = 'rgba(239, 68, 68, 0.35)';
+          ctx.shadowBlur = 18;
+          ctx.fillStyle = '#5f3916';
+          roundRect(hazard.x - 8, hazard.y - 5, hazard.w + 16, 30, 5);
+          ctx.fill();
+          ctx.fillStyle = '#2b1a0b';
+          roundRect(hazard.x - 2, hazard.y + 2, hazard.w + 4, 23, 4);
+          ctx.fill();
+          const lava = ctx.createLinearGradient(0, hazard.y, 0, hazard.y + hazard.h);
+          lava.addColorStop(0, '#facc15');
+          lava.addColorStop(0.45, '#f97316');
+          lava.addColorStop(1, '#dc2626');
+          ctx.fillStyle = lava;
+          roundRect(hazard.x, hazard.y + 8, hazard.w, Math.max(10, hazard.h - 8), 4);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(255,247,173,0.62)';
+          for (let x = hazard.x + 8; x < hazard.x + hazard.w; x += 26) {
+            ctx.beginPath();
+            ctx.ellipse(x, hazard.y + 11 + Math.sin(now / 160 + x) * 2, 8, 2.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+      }
+
+      level.platforms.forEach((block) => drawPlatform(block));
+      level.crumble.forEach((block) => {
+        if (block.broken <= 0) {
+          ctx.save();
+          ctx.shadowColor = 'rgba(79, 48, 17, 0.25)';
+          ctx.shadowBlur = 8;
+          roundRect(block.x, block.y, block.w, block.h + 12, 4);
+          ctx.fillStyle = block.timer > 0 ? '#d6a15f' : '#9b7653';
+          ctx.fill();
+          ctx.strokeStyle = '#f5d0a9';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.fillStyle = '#60442e';
+          ctx.fillRect(block.x + 8, block.y + 7, block.w - 16, 3);
+          ctx.restore();
+        }
+      });
+      level.trampolines.forEach((pad) => {
+        ctx.save();
+        ctx.shadowColor = 'rgba(250, 204, 21, 0.45)';
+        ctx.shadowBlur = 12;
+        ctx.fillStyle = '#fff7ad';
+        roundRect(pad.x - 4, pad.y - 8, pad.w + 8, 8, 3);
+        ctx.fill();
+        const spring = ctx.createLinearGradient(0, pad.y, 0, pad.y + pad.h);
+        spring.addColorStop(0, '#fde047');
+        spring.addColorStop(1, '#f97316');
+        ctx.fillStyle = spring;
+        roundRect(pad.x, pad.y, pad.w, pad.h + 4, 3);
+        ctx.fill();
+        ctx.fillStyle = '#f97316';
+        for (let x = pad.x + 6; x < pad.x + pad.w - 4; x += 13) {
+          ctx.fillRect(x, pad.y + 2, 8, 4);
+        }
+        ctx.restore();
+      });
+      level.portals.forEach((portal) => {
+        ctx.save();
+        ctx.translate(portal.x + portal.w / 2, portal.y + portal.h / 2);
+        const portalGlow = ctx.createRadialGradient(0, 0, 4, 0, 0, 36);
+        portalGlow.addColorStop(0, 'rgba(255,255,255,0.95)');
+        portalGlow.addColorStop(0.3, 'rgba(167,139,250,0.9)');
+        portalGlow.addColorStop(1, 'rgba(124,58,237,0)');
+        ctx.fillStyle = portalGlow;
+        ctx.beginPath();
+        ctx.arc(0, 0, 36, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#7c3aed';
+        ctx.lineWidth = 7;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 15, 25, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.strokeStyle = '#ddd6fe';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, 9, 17, now / 600, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      });
+      level.saws.forEach((saw) => {
+        ctx.save();
+        ctx.translate(saw.x, saw.y);
+        const glow = ctx.createRadialGradient(0, 0, saw.r * 0.2, 0, 0, saw.r * 2.8);
+        glow.addColorStop(0, 'rgba(255,255,255,0.75)');
+        glow.addColorStop(0.35, 'rgba(56,189,248,0.45)');
+        glow.addColorStop(1, 'rgba(56,189,248,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(0, 0, saw.r * 2.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.rotate(now / 130);
+        ctx.fillStyle = '#38bdf8';
+        for (let i = 0; i < 10; i++) {
+          ctx.rotate(Math.PI / 5);
+          ctx.fillRect(-3, -saw.r - 7, 6, 14);
+        }
+        ctx.beginPath();
+        ctx.arc(0, 0, saw.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#e0f2fe';
+        ctx.beginPath();
+        ctx.arc(0, 0, saw.r * 0.36, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+
+      level.coins.forEach((coin, index) => {
+        const bob = Math.sin(now / 220 + index) * 4;
+        ctx.save();
+        ctx.shadowColor = 'rgba(250, 204, 21, 0.55)';
+        ctx.shadowBlur = 10;
+        const coinGrad = ctx.createRadialGradient(coin.x - 3, coin.y + bob - 5, 2, coin.x, coin.y + bob, 15);
+        coinGrad.addColorStop(0, '#fff7ad');
+        coinGrad.addColorStop(0.45, '#facc15');
+        coinGrad.addColorStop(1, '#d97706');
+        ctx.fillStyle = coinGrad;
+        ctx.beginPath();
+        ctx.ellipse(coin.x, coin.y + bob, 9 + Math.sin(now / 180 + index) * 2, 14, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#fef08a';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      });
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(34, 197, 94, 0.28)';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = '#7c4a17';
+      roundRect(level.goal.x + 8, level.goal.y, 7, level.goal.h, 3);
+      ctx.fill();
+      const flag = ctx.createLinearGradient(level.goal.x + 14, level.goal.y, level.goal.x + 54, level.goal.y + 30);
+      flag.addColorStop(0, '#22c55e');
+      flag.addColorStop(1, '#86efac');
+      ctx.fillStyle = flag;
+      ctx.beginPath();
+      ctx.moveTo(level.goal.x + 14, level.goal.y);
+      ctx.bezierCurveTo(level.goal.x + 30, level.goal.y - 8, level.goal.x + 42, level.goal.y + 14, level.goal.x + 56, level.goal.y + 4);
+      ctx.lineTo(level.goal.x + 56, level.goal.y + 32);
+      ctx.bezierCurveTo(level.goal.x + 42, level.goal.y + 42, level.goal.x + 30, level.goal.y + 20, level.goal.x + 14, level.goal.y + 28);
+      ctx.closePath();
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.shadowColor = 'rgba(15, 23, 42, 0.34)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 5;
+      const body = ctx.createLinearGradient(0, player.y, 0, player.y + player.h);
+      body.addColorStop(0, '#ff9f1c');
+      body.addColorStop(0.55, '#f97316');
+      body.addColorStop(1, '#dc5f0b');
+      roundRect(player.x, player.y, player.w, player.h, 10);
+      ctx.fillStyle = body;
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+      roundRect(player.x + 5, player.y + 5, 8, player.h - 12, 5);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(player.x + 18, player.y + 11, 7, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.arc(player.x + 20, player.y + 11, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#7c2d12';
+      ctx.fillRect(player.x + 6, player.y + player.h - 3, 7, 7);
+      ctx.fillRect(player.x + 17, player.y + player.h - 3, 7, 7);
+      ctx.restore();
+
+      ctx.fillStyle = 'rgba(248,250,252,0.86)';
+      ctx.font = '800 19px Arial';
+      ctx.fillText(`${state.levelIndex + 1}. ${level.name}`, 54, 64);
+      if (level.wind) {
+        ctx.fillStyle = 'rgba(186,230,253,0.86)';
+        ctx.font = '800 14px Arial';
+        ctx.fillText(`Wind ${level.wind > 0 ? '>>' : '<<'}`, 54, 88);
+      }
+
+      ctx.restore();
+    }
+
+    function finishGame() {
+      state.paused = true;
+      state.complete = true;
+      panelTitle.textContent = 'All 15 Levels Cleared';
+      const seconds = Math.floor((performance.now() - state.startedAt) / 1000);
+      panelText.textContent = `Finished in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')} with ${state.deaths} deaths.`;
+      panelButton.textContent = 'Play Again';
+      panel.classList.add('visible');
+    }
+
+    function startGame() {
+      state.paused = false;
+      if (state.complete) {
+        state.complete = false;
+        state.deaths = 0;
+        state.startedAt = performance.now();
+        loadLevel(0);
+      }
+      panel.classList.remove('visible');
+    }
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = Math.min(0.033, (now - last) / 1000);
+      last = now;
+      if (!state.paused) {
+        update(dt, now);
+      }
+      draw(now);
+      requestAnimationFrame(loop);
+    }
+
+    window.addEventListener('resize', resize);
+    window.addEventListener('keydown', (event) => {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'Space'].includes(event.code)) {
+        event.preventDefault();
+      }
+      if (event.code === 'KeyR') {
+        resetPlayer(true);
+      }
+      keys.add(event.code);
+    });
+    window.addEventListener('keyup', (event) => {
+      keys.delete(event.code);
+    });
+
+    document.querySelectorAll('.touch button').forEach((button) => {
+      const code = button.dataset.key;
+      button.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        if (code === 'KeyR') {
+          resetPlayer(true);
+        } else {
+          keys.add(code);
+        }
+      });
+      button.addEventListener('pointerup', () => keys.delete(code));
+      button.addEventListener('pointercancel', () => keys.delete(code));
+      button.addEventListener('pointerleave', () => keys.delete(code));
+    });
+
+    panelButton.addEventListener('click', startGame);
+    resize();
+    loadLevel(0);
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
