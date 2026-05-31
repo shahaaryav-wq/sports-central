@@ -589,6 +589,9 @@
     let mlbLoading = false;
     let mlbLastUpdated = null;
     const liveMlbData = {};
+    const liveLeagueData = {};
+    const leagueLoading = {};
+    const leagueLastUpdated = {};
     const subscriptions = loadSubscriptions();
     const mlbTeamIds = {
       'Arizona Diamondbacks': 109,
@@ -621,6 +624,13 @@
       'Texas Rangers': 140,
       'Toronto Blue Jays': 141,
       'Washington Nationals': 120
+    };
+    const espnLeagueConfigs = {
+      nfl: ['football', 'nfl'],
+      nba: ['basketball', 'nba'],
+      nhl: ['hockey', 'nhl'],
+      mls: ['soccer', 'usa.1'],
+      wnba: ['basketball', 'wnba']
     };
 
     function hashText(text) {
@@ -687,6 +697,78 @@
 
     function getMlbLive(teamName) {
       return liveMlbData[teamName] || null;
+    }
+
+    function normalizeName(name) {
+      return String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    function getLeagueLive(leagueId, teamName) {
+      return liveLeagueData[leagueId]?.[teamName] || null;
+    }
+
+    async function refreshLeagueData(league, force = false) {
+      const config = espnLeagueConfigs[league.id];
+      if (!config || leagueLoading[league.id]) {
+        return;
+      }
+      if (!force && leagueLastUpdated[league.id] && Date.now() - leagueLastUpdated[league.id] < 30000) {
+        return;
+      }
+
+      leagueLoading[league.id] = true;
+      try {
+        const [sport, slug] = config;
+        const scoreboardUrl = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${slug}/scoreboard?limit=500`;
+        const scoreboardResponse = await fetch(scoreboardUrl);
+        if (!scoreboardResponse.ok) {
+          throw new Error(`${league.name} scoreboard request failed`);
+        }
+        const scoreboard = await scoreboardResponse.json();
+        liveLeagueData[league.id] ||= {};
+
+        (scoreboard.events || []).forEach((event) => {
+          const competition = event.competitions?.[0];
+          const competitors = competition?.competitors || [];
+          competitors.forEach((competitor) => {
+            const teamName = league.teams.find((name) => normalizeName(name) === normalizeName(competitor.team?.displayName));
+            const opponent = competitors.find((candidate) => candidate !== competitor);
+            if (!teamName || !opponent) {
+              return;
+            }
+
+            const home = competitor.homeAway === 'home';
+            const overall = competitor.records?.find((record) => record.type === 'total' || record.name === 'overall');
+            const status = event.status?.type || competition.status?.type || {};
+            liveLeagueData[league.id][teamName] = {
+              record: overall?.summary || '',
+              winPct: '',
+              rank: '',
+              streak: status.completed ? 'Final' : 'Next',
+              nextGame: `${home ? 'vs' : 'at'} ${opponent.team.displayName}`,
+              nextGameTime: formatGameDate(event.date),
+              broadcast: competition.venue?.fullName || 'ESPN scoreboard',
+              alertTime: status.completed ? 'final score' : '30 minutes before',
+              source: `Live ${league.name} scoreboard`,
+              status: status.shortDetail || status.detail || status.description || ''
+            };
+          });
+        });
+
+        leagueLastUpdated[league.id] = Date.now();
+        if (activeLeague?.id === league.id) {
+          if (view === 'teams') {
+            renderTeams(activeLeague, false);
+          }
+          if (view === 'detail' && activeTeam) {
+            renderDetail(activeLeague, activeTeam, false);
+          }
+        }
+      } catch (error) {
+        showToast(`${league.name} live data could not update. Showing fallback stats.`);
+      } finally {
+        leagueLoading[league.id] = false;
+      }
     }
 
     async function refreshMlbData(force = false) {
@@ -790,12 +872,14 @@
       liveRefreshTimer = setInterval(() => {
         if (activeLeague?.id === 'mlb') {
           refreshMlbData(true);
+        } else if (espnLeagueConfigs[activeLeague?.id]) {
+          refreshLeagueData(activeLeague, true);
         }
       }, 30000);
     }
 
     function buildStats(league, teamName) {
-      const live = league.id === 'mlb' ? getMlbLive(teamName) : null;
+      const live = league.id === 'mlb' ? getMlbLive(teamName) : getLeagueLive(league.id, teamName);
       const seed = hashText(`${league.id}-${teamName}`);
       const games = league.sport === 'Baseball' ? 162 : league.sport === 'Football' ? 17 : league.sport === 'Soccer' ? 34 : 82;
       const draws = league.sport === 'Soccer' ? seed % 8 : 0;
@@ -805,7 +889,7 @@
       const defense = 66 + ((seed >> 5) % 31);
       const momentum = 41 + ((seed >> 11) % 57);
       const opponents = league.teams.filter((team) => team !== teamName);
-      const opponent = opponents[(seed >> 7) % opponents.length];
+      const opponent = opponents[(seed >> 7) % opponents.length] || 'TBA';
       return {
         record: live?.record || (league.sport === 'Soccer' ? `${wins}-${losses}-${draws}` : `${wins}-${losses}`),
         winPct: live?.winPct || (wins / games).toFixed(3).replace(/^0/, ''),
@@ -893,12 +977,16 @@
       const teams = league.teams.filter((team) => team.toLowerCase().includes(query));
       const liveNote = league.id === 'mlb'
         ? ` Live regular-season data refreshes every 30 seconds${mlbLastUpdated ? `; last update ${new Date(mlbLastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.` : '.'}`
+        : espnLeagueConfigs[league.id]
+          ? ` Live scoreboard data refreshes every 30 seconds${leagueLastUpdated[league.id] ? `; last update ${new Date(leagueLastUpdated[league.id]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.` : '.'}`
         : '';
       setHeader('Team folder', league.fullName, `${teams.length} of ${league.teams.length} teams shown. Click a card for stats and follow alerts.${liveNote}`);
       content.innerHTML = '';
 
       if (league.id === 'mlb' && requestLiveUpdate) {
         refreshMlbData(true);
+      } else if (espnLeagueConfigs[league.id] && requestLiveUpdate) {
+        refreshLeagueData(league, true);
       }
 
       const grid = document.createElement('section');
@@ -952,12 +1040,16 @@
       const colors = teamColors(teamName);
       const liveNote = league.id === 'mlb'
         ? ` | ${stats.source}${mlbLastUpdated ? ` updated ${new Date(mlbLastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ' loading'}`
+        : espnLeagueConfigs[league.id]
+          ? ` | ${stats.source}${leagueLastUpdated[league.id] ? ` updated ${new Date(leagueLastUpdated[league.id]).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ' loading'}`
         : '';
       setHeader('Team stats', teamName, `${league.name} | ${stats.nextGame}${stats.nextGameTime ? `, ${stats.nextGameTime}` : ''} | ${stats.broadcast}${liveNote}`);
       content.innerHTML = '';
 
       if (league.id === 'mlb' && requestLiveUpdate) {
         refreshMlbData(true);
+      } else if (espnLeagueConfigs[league.id] && requestLiveUpdate) {
+        refreshLeagueData(league, true);
       }
 
       const detail = document.createElement('section');
@@ -989,7 +1081,7 @@
         <div class="stat-grid">
           <div class="stat"><div class="label">Season Record</div><div class="value">${stats.record}</div></div>
           <div class="stat"><div class="label">Win Pct</div><div class="value">${stats.winPct}</div></div>
-          <div class="stat"><div class="label">${league.id === 'mlb' ? 'League Rank' : 'Power Rank'}</div><div class="value">#${stats.rank}</div></div>
+          <div class="stat"><div class="label">${league.id === 'mlb' ? 'League Rank' : 'Power Rank'}</div><div class="value">${stats.rank ? `#${stats.rank}` : 'Live'}</div></div>
           <div class="stat"><div class="label">Streak</div><div class="value">${stats.streak}</div></div>
         </div>
         <div class="meter-grid">
