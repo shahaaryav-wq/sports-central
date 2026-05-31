@@ -683,6 +683,10 @@
       return `${year}-${month}-${day}`;
     }
 
+    function compactDate(date) {
+      return dateString(date).replace(/-/g, '');
+    }
+
     function formatGameDate(value) {
       if (!value) {
         return 'time TBA';
@@ -705,6 +709,60 @@
 
     function getLeagueLive(leagueId, teamName) {
       return liveLeagueData[leagueId]?.[teamName] || null;
+    }
+
+    function ratingBounds(sport) {
+      if (sport === 'Football') return { offenseMax: 38, defenseMax: 35 };
+      if (sport === 'Basketball') return { offenseMax: 130, defenseMax: 125 };
+      if (sport === 'Baseball') return { offenseMax: 8, defenseMax: 7 };
+      if (sport === 'Hockey') return { offenseMax: 5, defenseMax: 5 };
+      if (sport === 'Soccer') return { offenseMax: 4, defenseMax: 4 };
+      return { offenseMax: 100, defenseMax: 100 };
+    }
+
+    function clampRating(value) {
+      return Math.max(30, Math.min(99, Math.round(value)));
+    }
+
+    function calculateRecentRatings(league, recentGames) {
+      if (!recentGames.length) {
+        return null;
+      }
+
+      const { offenseMax, defenseMax } = ratingBounds(league.sport);
+      const totals = recentGames.reduce((sum, game) => {
+        sum.scored += game.scored;
+        sum.allowed += game.allowed;
+        sum.wins += game.scored > game.allowed ? 1 : 0;
+        sum.draws += game.scored === game.allowed ? 1 : 0;
+        return sum;
+      }, { scored: 0, allowed: 0, wins: 0, draws: 0 });
+      const averageScored = totals.scored / recentGames.length;
+      const averageAllowed = totals.allowed / recentGames.length;
+      const resultRate = (totals.wins + totals.draws * 0.5) / recentGames.length;
+      const newestFirst = [...recentGames].sort((a, b) => new Date(b.date) - new Date(a.date));
+      let streak = 0;
+      let streakType = '';
+
+      newestFirst.some((game) => {
+        const result = game.scored > game.allowed ? 'W' : game.scored < game.allowed ? 'L' : 'T';
+        if (!streakType) {
+          streakType = result;
+        }
+        if (result === streakType) {
+          streak += 1;
+          return false;
+        }
+        return true;
+      });
+
+      return {
+        offense: clampRating(45 + (averageScored / offenseMax) * 54),
+        defense: clampRating(99 - (averageAllowed / defenseMax) * 54),
+        momentum: clampRating(35 + resultRate * 55 + Math.min(streak, 5) * (streakType === 'W' ? 3 : streakType === 'L' ? -2 : 1)),
+        streak: streakType ? `${streakType}${streak}` : '',
+        sourceDetail: `Ratings from last ${recentGames.length} completed games`
+      };
     }
 
     async function refreshLeagueData(league, force = false) {
@@ -753,6 +811,65 @@
               status: status.shortDetail || status.detail || status.description || ''
             };
           });
+        });
+
+        const recentByTeam = {};
+        const recentDates = Array.from({ length: 18 }, (_, index) => {
+          const date = new Date();
+          date.setDate(date.getDate() - index);
+          return date;
+        });
+
+        await Promise.all(recentDates.map(async (date) => {
+          const recentUrl = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${slug}/scoreboard?dates=${compactDate(date)}&limit=500`;
+          const recentResponse = await fetch(recentUrl);
+          if (!recentResponse.ok) {
+            return;
+          }
+          const recentScoreboard = await recentResponse.json();
+          (recentScoreboard.events || []).forEach((event) => {
+            const competition = event.competitions?.[0];
+            const competitors = competition?.competitors || [];
+            const completed = event.status?.type?.completed || competition?.status?.type?.completed;
+            if (!completed || competitors.length < 2) {
+              return;
+            }
+            competitors.forEach((competitor) => {
+              const teamName = league.teams.find((name) => normalizeName(name) === normalizeName(competitor.team?.displayName));
+              const opponent = competitors.find((candidate) => candidate !== competitor);
+              if (!teamName || !opponent || competitor.score == null || opponent.score == null) {
+                return;
+              }
+              recentByTeam[teamName] ||= [];
+              recentByTeam[teamName].push({
+                date: event.date,
+                scored: Number(competitor.score),
+                allowed: Number(opponent.score)
+              });
+            });
+          });
+        }));
+
+        Object.entries(recentByTeam).forEach(([teamName, games]) => {
+          const ratings = calculateRecentRatings(
+            league,
+            games.sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-10)
+          );
+          if (!ratings) {
+            return;
+          }
+          liveLeagueData[league.id][teamName] ||= {
+            record: '',
+            winPct: '',
+            rank: '',
+            nextGame: 'No upcoming game found',
+            nextGameTime: '',
+            broadcast: 'ESPN scoreboard',
+            alertTime: 'final score',
+            source: `Live ${league.name} scoreboard`,
+            status: ''
+          };
+          Object.assign(liveLeagueData[league.id][teamName], ratings);
         });
 
         leagueLastUpdated[league.id] = Date.now();
@@ -851,6 +968,40 @@
           };
         });
 
+        const recentStart = new Date(today);
+        recentStart.setDate(today.getDate() - 30);
+        const recentUrl = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&season=2026&gameType=R&startDate=${dateString(recentStart)}&endDate=${dateString(today)}&hydrate=team,linescore`;
+        const recentResponse = await fetch(recentUrl);
+        if (recentResponse.ok) {
+          const recentSchedule = await recentResponse.json();
+          Object.entries(mlbTeamIds).forEach(([teamName, teamId]) => {
+            const recentGames = [];
+            (recentSchedule.dates || []).forEach((date) => {
+              (date.games || []).forEach((game) => {
+                const status = game.status?.detailedState || '';
+                const finished = status === 'Final' || status === 'Game Over' || status.includes('Completed');
+                const away = game.teams.away;
+                const home = game.teams.home;
+                const involved = away.team.id === teamId || home.team.id === teamId;
+                if (!finished || !involved || away.score == null || home.score == null) {
+                  return;
+                }
+                const team = away.team.id === teamId ? away : home;
+                const opponent = away.team.id === teamId ? home : away;
+                recentGames.push({
+                  date: game.gameDate,
+                  scored: Number(team.score),
+                  allowed: Number(opponent.score)
+                });
+              });
+            });
+            const ratings = calculateRecentRatings(mlb, recentGames.slice(-10));
+            if (ratings && liveMlbData[teamName]) {
+              Object.assign(liveMlbData[teamName], ratings);
+            }
+          });
+        }
+
         mlbLastUpdated = Date.now();
         if (activeLeague?.id === 'mlb') {
           if (view === 'teams') {
@@ -895,16 +1046,17 @@
         winPct: live?.winPct || (wins / games).toFixed(3).replace(/^0/, ''),
         rank: live?.rank || 1 + (seed % league.teams.length),
         streak: live?.streak || `${seed % 3 === 1 ? 'L' : 'W'}${1 + (seed % 5)}`,
-        offense,
-        defense,
-        momentum,
+        offense: live?.offense || offense,
+        defense: live?.defense || defense,
+        momentum: live?.momentum || momentum,
         nextGame: live?.nextGame || `vs ${opponent}`,
         nextGameTime: live?.nextGameTime || '',
         broadcast: live?.broadcast || ['Local TV', 'National Stream', 'Prime Time', 'Radio + App'][seed % 4],
         alertTime: live?.alertTime || ['2 hours before', '30 minutes before', 'at game start', 'final score'][seed % 4],
         form: live?.form || ['Hot', 'Steady', 'Clutch', 'Building', 'Dangerous'][seed % 5],
         source: live?.source || 'Projected demo stats',
-        status: live?.status || ''
+        status: live?.status || '',
+        sourceDetail: live?.sourceDetail || 'Fallback demo rating formula'
       };
     }
 
@@ -1091,8 +1243,8 @@
         </div>
         <div class="matchup">
           <h3>Rating Source</h3>
-          <p class="sub">Offense, defense, and momentum are Sports Central demo ratings from the app formula, not official league stats.</p>
-          <p class="sub">Offense estimates scoring strength, defense estimates stopping strength, and momentum estimates recent form/energy. Records and matchups use the live source shown on this page when available.</p>
+          <p class="sub">${stats.sourceDetail}. Offense estimates recent scoring strength, defense estimates recent stopping strength, and momentum weighs recent results and streak.</p>
+          <p class="sub">Records and matchups use the live source shown on this page when available.</p>
         </div>
         <div class="matchup">
           <h3>Next Game</h3>
