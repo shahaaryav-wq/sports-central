@@ -5,7 +5,7 @@ export default async function handler(request, response) {
     return json(response, 405, { error: 'Method not allowed' });
   }
 
-  const { email, league, leagueName, team } = request.body || {};
+  const { email, league, leagueName, preferences = {}, team } = request.body || {};
 
   if (!email || !league || !team) {
     return json(response, 400, { error: 'Missing email, league, or team' });
@@ -25,19 +25,41 @@ export default async function handler(request, response) {
   }
 
   try {
-    const rows = await supabaseFetch('follows?on_conflict=email,league,team', {
-      method: 'POST',
-      headers: {
-        Prefer: 'resolution=merge-duplicates,return=representation'
-      },
-      body: JSON.stringify({
-        email,
-        league,
-        league_name: leagueName || config.name,
-        team,
-        team_id: teamId
-      })
-    });
+    const body = {
+      email,
+      league,
+      league_name: leagueName || config.name,
+      team,
+      team_id: teamId,
+      final_score_emails: preferences.finalScore !== false,
+      reminder_emails: Boolean(preferences.reminders),
+      test_emails: preferences.testEmails !== false
+    };
+    let rows;
+
+    try {
+      rows = await supabaseFetch('follows?on_conflict=email,league,team', {
+        method: 'POST',
+        headers: {
+          Prefer: 'resolution=merge-duplicates,return=representation'
+        },
+        body: JSON.stringify(body)
+      });
+    } catch (error) {
+      rows = await supabaseFetch('follows?on_conflict=email,league,team', {
+        method: 'POST',
+        headers: {
+          Prefer: 'resolution=merge-duplicates,return=representation'
+        },
+        body: JSON.stringify({
+          email,
+          league,
+          league_name: leagueName || config.name,
+          team,
+          team_id: teamId
+        })
+      });
+    }
 
     return json(response, 200, { ok: true, follow: rows?.[0] || null });
   } catch (error) {

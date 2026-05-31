@@ -344,6 +344,41 @@
       gap: 4px;
     }
 
+    .follow-actions,
+    .preference-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .preference-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .preference-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 15px;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .preference-row input {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+    }
+
+    .loading-card {
+      min-height: 0;
+      padding: 18px;
+      align-content: center;
+    }
+
     .hidden {
       display: none;
     }
@@ -383,6 +418,12 @@
       color: var(--text);
       font-weight: 800;
       outline: none;
+    }
+
+    .modal .preference-row input {
+      width: 18px;
+      height: 18px;
+      padding: 0;
     }
 
     .modal input:focus {
@@ -472,7 +513,10 @@
       </div>
       <div class="toolbar">
         <button class="plain-button hidden" id="backButton" type="button">Back</button>
+        <input class="search" id="globalSearch" type="search" placeholder="Search all teams">
         <input class="search hidden" id="search" type="search" placeholder="Search teams">
+        <button class="plain-button" id="myTeamsButton" type="button">My Teams</button>
+        <button class="plain-button" id="runRecapsButton" type="button">Recap Now</button>
       </div>
     </header>
 
@@ -487,6 +531,20 @@
         <p class="sub" id="modalCopy">Enter your email for game reminders and final score updates.</p>
       </div>
       <input id="emailInput" type="email" autocomplete="email" placeholder="your@email.com" required>
+      <div class="preference-list">
+        <label class="preference-row">
+          <input id="prefFinal" type="checkbox" checked>
+          Final score emails after a followed team finishes a game
+        </label>
+        <label class="preference-row">
+          <input id="prefReminder" type="checkbox">
+          Pre-game reminder emails if that feature is added later
+        </label>
+        <label class="preference-row">
+          <input id="prefTest" type="checkbox" checked>
+          Allow test emails from this app
+        </label>
+      </div>
       <div class="modal-actions">
         <button class="plain-button" id="cancelFollow" type="button">Cancel</button>
         <button class="primary-button" type="submit">Follow</button>
@@ -571,12 +629,18 @@
     const pageTitle = document.getElementById('pageTitle');
     const pageSubtitle = document.getElementById('pageSubtitle');
     const backButton = document.getElementById('backButton');
+    const globalSearch = document.getElementById('globalSearch');
     const search = document.getElementById('search');
+    const myTeamsButton = document.getElementById('myTeamsButton');
+    const runRecapsButton = document.getElementById('runRecapsButton');
     const modalBackdrop = document.getElementById('modalBackdrop');
     const followForm = document.getElementById('followForm');
     const modalTitle = document.getElementById('modalTitle');
     const modalCopy = document.getElementById('modalCopy');
     const emailInput = document.getElementById('emailInput');
+    const prefFinal = document.getElementById('prefFinal');
+    const prefReminder = document.getElementById('prefReminder');
+    const prefTest = document.getElementById('prefTest');
     const cancelFollow = document.getElementById('cancelFollow');
     const toast = document.getElementById('toast');
 
@@ -593,6 +657,7 @@
     const leagueLoading = {};
     const leagueLastUpdated = {};
     const subscriptions = loadSubscriptions();
+    let currentEmail = localStorage.getItem('sports-central-email') || '';
     const mlbTeamIds = {
       'Arizona Diamondbacks': 109,
       Athletics: 133,
@@ -651,6 +716,66 @@
 
     function saveSubscriptions() {
       localStorage.setItem('sports-central-follows', JSON.stringify(subscriptions));
+    }
+
+    function defaultPreferences() {
+      return {
+        finalScore: true,
+        reminders: false,
+        testEmails: true
+      };
+    }
+
+    function normalizePreferences(preferences = {}) {
+      return {
+        finalScore: preferences.finalScore !== false && preferences.final_score_emails !== false,
+        reminders: Boolean(preferences.reminders || preferences.reminder_emails),
+        testEmails: preferences.testEmails !== false && preferences.test_emails !== false
+      };
+    }
+
+    function setCurrentEmail(email) {
+      currentEmail = email;
+      localStorage.setItem('sports-central-email', email);
+    }
+
+    function allTeamEntries() {
+      return leagues.flatMap((league) => league.teams.map((team) => ({ league, team })));
+    }
+
+    function upsertLocalFollow({ email, league, leagueName, team, preferences }) {
+      const existing = subscriptions.find((item) => item.email === email && item.league === league && item.team === team);
+      const nextPreferences = normalizePreferences(preferences);
+      if (existing) {
+        existing.email = email;
+        existing.leagueName = leagueName;
+        existing.preferences = nextPreferences;
+        return existing;
+      }
+
+      const follow = {
+        league,
+        leagueName,
+        team,
+        email,
+        preferences: nextPreferences,
+        createdAt: new Date().toISOString()
+      };
+      subscriptions.push(follow);
+      return follow;
+    }
+
+    function removeLocalFollow(email, leagueId, teamName) {
+      const index = subscriptions.findIndex((item) => item.email === email && item.league === leagueId && item.team === teamName);
+      if (index !== -1) {
+        subscriptions.splice(index, 1);
+        saveSubscriptions();
+      }
+    }
+
+    function subscriptionFor(league, teamName) {
+      return subscriptions.find((item) => item.league === league.id && item.team === teamName && (!currentEmail || item.email === currentEmail))
+        || subscriptions.find((item) => item.league === league.id && item.team === teamName);
     }
 
     function teamInitials(name) {
@@ -1061,7 +1186,7 @@
     }
 
     function isFollowing(league, teamName) {
-      return subscriptions.some((item) => item.league === league.id && item.team === teamName);
+      return Boolean(subscriptionFor(league, teamName));
     }
 
     function setHeader(nextKicker, title, subtitle) {
@@ -1070,6 +1195,7 @@
       pageSubtitle.textContent = subtitle;
       backButton.classList.toggle('hidden', view === 'leagues');
       search.classList.toggle('hidden', view !== 'teams');
+      myTeamsButton.textContent = currentEmail ? 'My Teams' : 'My Teams';
       if (view !== 'teams') {
         search.value = '';
       }
@@ -1092,6 +1218,24 @@
 
       const grid = document.createElement('section');
       grid.className = 'grid';
+
+      const lastLeagueId = localStorage.getItem('sports-central-last-league');
+      const lastLeague = leagues.find((league) => league.id === lastLeagueId);
+      if (lastLeague) {
+        const shortcut = document.createElement('button');
+        shortcut.type = 'button';
+        shortcut.className = 'card loading-card';
+        shortcut.addEventListener('click', () => renderTeams(lastLeague));
+        shortcut.innerHTML = `
+          <div>
+            <span class="emoji">${lastLeague.emoji}</span>
+            <span class="card-title">Last Opened: ${lastLeague.name}</span>
+            <span class="card-copy">Jump back into ${lastLeague.fullName}.</span>
+          </div>
+          <div class="chips"><span class="chip" style="--chip-color:${lastLeague.color}">shortcut</span></div>
+        `;
+        grid.append(shortcut);
+      }
 
       leagues.forEach((league) => {
         const card = document.createElement('button');
@@ -1125,6 +1269,7 @@
       view = 'teams';
       activeLeague = league;
       activeTeam = null;
+      localStorage.setItem('sports-central-last-league', league.id);
       const query = search.value.trim().toLowerCase();
       const teams = league.teams.filter((team) => team.toLowerCase().includes(query));
       const liveNote = league.id === 'mlb'
@@ -1139,6 +1284,13 @@
         refreshMlbData(true);
       } else if (espnLeagueConfigs[league.id] && requestLiveUpdate) {
         refreshLeagueData(league, true);
+      }
+
+      if ((league.id === 'mlb' && mlbLoading && !mlbLastUpdated) || (espnLeagueConfigs[league.id] && leagueLoading[league.id] && !leagueLastUpdated[league.id])) {
+        const loading = document.createElement('div');
+        loading.className = 'card loading-card';
+        loading.innerHTML = '<span class="card-title">Loading live scoreboard</span><span class="card-copy">Cards will fill in with current records and game status when the source responds.</span>';
+        content.append(loading);
       }
 
       const grid = document.createElement('section');
@@ -1190,6 +1342,10 @@
       activeTeam = teamName;
       const stats = buildStats(league, teamName);
       const colors = teamColors(teamName);
+      const followed = isFollowing(league, teamName);
+      const lastUpdated = league.id === 'mlb'
+        ? mlbLastUpdated
+        : leagueLastUpdated[league.id];
       const liveNote = league.id === 'mlb'
         ? ` | ${stats.source}${mlbLastUpdated ? ` updated ${new Date(mlbLastUpdated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : ' loading'}`
         : espnLeagueConfigs[league.id]
@@ -1219,10 +1375,11 @@
         </div>
         <div class="chips">
           <span class="chip" style="--chip-color:${league.color}">${league.sport}</span>
-          <span class="chip" style="--chip-color:${colors[1]}">${isFollowing(league, teamName) ? 'following' : 'not followed'}</span>
+          <span class="chip" style="--chip-color:${colors[1]}">${followed ? 'following' : 'not followed'}</span>
         </div>
         <div class="toolbar" style="justify-content:flex-start">
-          <button class="primary-button" id="followButton" type="button">${isFollowing(league, teamName) ? 'Update Email' : 'Follow'}</button>
+          <button class="primary-button" id="followButton" type="button">${followed ? 'Update Email' : 'Follow'}</button>
+          <button class="plain-button ${followed ? '' : 'hidden'}" id="unfollowButton" type="button">Unfollow</button>
           <button class="plain-button" id="testEmailButton" type="button">Test Email</button>
         </div>
       `;
@@ -1240,6 +1397,15 @@
           <div class="meter-box"><div class="label">Offense</div><div class="bar"><span style="width:${stats.offense}%"></span></div><div class="value">${stats.offense}</div></div>
           <div class="meter-box"><div class="label">Defense</div><div class="bar"><span style="width:${stats.defense}%"></span></div><div class="value">${stats.defense}</div></div>
           <div class="meter-box"><div class="label">Momentum</div><div class="bar"><span style="width:${stats.momentum}%"></span></div><div class="value">${stats.momentum}</div></div>
+        </div>
+        <div class="matchup">
+          <h3>Game Status</h3>
+          <p class="sub">${stats.status || stats.nextGameTime || 'Schedule status unavailable'}</p>
+          <p class="sub">${lastUpdated ? `Last updated ${new Date(lastUpdated).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : 'Live source is loading or unavailable.'}</p>
+          <div class="chips">
+            <span class="chip" style="--chip-color:${league.color}">${stats.source}</span>
+            <span class="chip" style="--chip-color:${colors[1]}">${stats.nextGameTime ? 'scheduled' : 'check source'}</span>
+          </div>
         </div>
         <div class="matchup">
           <h3>Rating Source</h3>
@@ -1262,6 +1428,7 @@
       detail.append(hero, panel);
       content.append(detail);
       document.getElementById('followButton').addEventListener('click', () => openFollow(league, teamName));
+      document.getElementById('unfollowButton')?.addEventListener('click', () => unfollowTeam(league, teamName));
       document.getElementById('testEmailButton').addEventListener('click', () => testEmail(league, teamName));
       renderFollowList();
     }
@@ -1283,17 +1450,25 @@
       subscriptions.slice(-6).reverse().forEach((subscription) => {
         const item = document.createElement('div');
         item.className = 'follow-item';
-        item.innerHTML = `<strong>${subscription.team}</strong><span>${subscription.leagueName} | ${subscription.email}</span>`;
+        item.innerHTML = `
+          <strong>${subscription.team}</strong>
+          <span>${subscription.leagueName} | ${subscription.email}</span>
+          <span>Final scores ${normalizePreferences(subscription.preferences).finalScore ? 'on' : 'off'}</span>
+        `;
         list.append(item);
       });
     }
 
     function openFollow(league, teamName) {
       pendingFollowTeam = { league, teamName };
-      const existing = subscriptions.find((item) => item.league === league.id && item.team === teamName);
+      const existing = subscriptionFor(league, teamName);
+      const preferences = existing ? normalizePreferences(existing.preferences) : defaultPreferences();
       modalTitle.textContent = `Follow ${teamName}`;
-      modalCopy.textContent = 'Enter your email for every game reminder and score alert.';
-      emailInput.value = existing ? existing.email : '';
+      modalCopy.textContent = 'Enter your email and choose which alerts you want.';
+      emailInput.value = existing ? existing.email : currentEmail;
+      prefFinal.checked = preferences.finalScore;
+      prefReminder.checked = preferences.reminders;
+      prefTest.checked = preferences.testEmails;
       modalBackdrop.classList.add('visible');
       emailInput.focus();
     }
@@ -1303,19 +1478,15 @@
       modalBackdrop.classList.remove('visible');
     }
 
-    async function saveFollow(league, teamName, email) {
-      const existing = subscriptions.find((item) => item.league === league.id && item.team === teamName);
-      if (existing) {
-        existing.email = email;
-      } else {
-        subscriptions.push({
-          league: league.id,
-          leagueName: league.name,
-          team: teamName,
-          email,
-          createdAt: new Date().toISOString()
-        });
-      }
+    async function saveFollow(league, teamName, email, preferences = defaultPreferences()) {
+      setCurrentEmail(email);
+      upsertLocalFollow({
+        email,
+        league: league.id,
+        leagueName: league.name,
+        team: teamName,
+        preferences
+      });
       saveSubscriptions();
 
       if (['mlb', 'nfl', 'nba', 'nhl', 'mls', 'wnba'].includes(league.id)) {
@@ -1330,7 +1501,8 @@
               email,
               league: league.id,
               leagueName: league.name,
-              team: teamName
+              team: teamName,
+              preferences
             })
           });
           const data = await followResponse.json();
@@ -1350,10 +1522,15 @@
     }
 
     async function testEmail(league, teamName) {
-      const subscription = subscriptions.find((item) => item.league === league.id && item.team === teamName);
+      const subscription = subscriptionFor(league, teamName);
       if (!subscription) {
         openFollow(league, teamName);
         showToast('Add an email first, then send a test alert.');
+        return;
+      }
+
+      if (!normalizePreferences(subscription.preferences).testEmails) {
+        showToast('Test emails are turned off for this follow. Update Email to turn them back on.');
         return;
       }
 
@@ -1387,6 +1564,275 @@
       }
     }
 
+    async function loadServerFollows(email) {
+      if (!email) {
+        return [];
+      }
+
+      const response = await fetch(`/api/list-follows?email=${encodeURIComponent(email)}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Could not load follows');
+      }
+
+      return (data.follows || []).map((follow) => ({
+        email: follow.email,
+        league: follow.league,
+        leagueName: follow.league_name || follow.league,
+        team: follow.team,
+        preferences: normalizePreferences(follow),
+        createdAt: follow.created_at
+      }));
+    }
+
+    async function renderMyTeams() {
+      view = 'my-teams';
+      activeLeague = null;
+      activeTeam = null;
+      setHeader('Saved follows', 'My Teams', currentEmail ? `Showing follows saved for ${currentEmail}.` : 'Follow a team or enter your email to load saved follows.');
+      content.innerHTML = '';
+
+      const panel = document.createElement('section');
+      panel.className = 'stats-panel';
+      panel.innerHTML = `
+        <div class="matchup">
+          <h3>Saved Email</h3>
+          <p class="sub">Use the same email you entered when following teams.</p>
+          <div class="follow-actions">
+            <input class="search" id="myTeamsEmail" type="email" placeholder="your@email.com" value="${currentEmail}">
+            <button class="primary-button" id="loadMyTeams" type="button">Load</button>
+          </div>
+        </div>
+        <div class="follow-list" id="myTeamsList"></div>
+      `;
+      content.append(panel);
+
+      document.getElementById('loadMyTeams').addEventListener('click', () => {
+        const email = document.getElementById('myTeamsEmail').value.trim();
+        if (!email) {
+          showToast('Enter an email to load follows.');
+          return;
+        }
+        setCurrentEmail(email);
+        renderMyTeams();
+      });
+
+      const list = document.getElementById('myTeamsList');
+      list.innerHTML = '<div class="follow-item"><strong>Loading follows</strong><span>Checking saved server data...</span></div>';
+
+      try {
+        const serverFollows = currentEmail ? await loadServerFollows(currentEmail) : [];
+        serverFollows.forEach((follow) => upsertLocalFollow(follow));
+        if (serverFollows.length) {
+          saveSubscriptions();
+        }
+      } catch (error) {
+        showToast(`Could not load server follows: ${error.message}`);
+      }
+
+      const follows = subscriptions.filter((item) => !currentEmail || item.email === currentEmail);
+      list.innerHTML = '';
+
+      if (!follows.length) {
+        list.innerHTML = '<div class="follow-item"><strong>No follows found</strong><span>Open a team and click Follow to save one.</span></div>';
+        return;
+      }
+
+      follows
+        .slice()
+        .sort((a, b) => a.team.localeCompare(b.team))
+        .forEach((follow) => {
+          const league = leagues.find((item) => item.id === follow.league);
+          const preferences = normalizePreferences(follow.preferences);
+          const item = document.createElement('div');
+          item.className = 'follow-item';
+          item.innerHTML = `
+            <strong>${follow.team}</strong>
+            <span>${follow.leagueName || league?.name || follow.league} | ${follow.email}</span>
+            <label class="preference-row"><input class="pref-final" type="checkbox" ${preferences.finalScore ? 'checked' : ''}> Final score emails</label>
+            <label class="preference-row"><input class="pref-reminder" type="checkbox" ${preferences.reminders ? 'checked' : ''}> Reminder emails</label>
+            <label class="preference-row"><input class="pref-test" type="checkbox" ${preferences.testEmails ? 'checked' : ''}> Test emails</label>
+            <div class="follow-actions">
+              <button class="plain-button open-team" type="button">Open</button>
+              <button class="plain-button remove-team" type="button">Unfollow</button>
+            </div>
+          `;
+          item.querySelector('.open-team').addEventListener('click', () => {
+            if (league) {
+              renderDetail(league, follow.team);
+            }
+          });
+          item.querySelector('.remove-team').addEventListener('click', () => unfollowTeam(league, follow.team, follow.email, true));
+          const collectItemPreferences = () => ({
+            finalScore: item.querySelector('.pref-final').checked,
+            reminders: item.querySelector('.pref-reminder').checked,
+            testEmails: item.querySelector('.pref-test').checked
+          });
+          item.querySelector('.pref-final').addEventListener('change', () => {
+            updatePreferences(league, follow.team, follow.email, collectItemPreferences());
+          });
+          item.querySelector('.pref-reminder').addEventListener('change', () => {
+            updatePreferences(league, follow.team, follow.email, collectItemPreferences());
+          });
+          item.querySelector('.pref-test').addEventListener('change', () => {
+            updatePreferences(league, follow.team, follow.email, collectItemPreferences());
+          });
+          list.append(item);
+        });
+    }
+
+    async function updatePreferences(league, teamName, email, preferences) {
+      if (!league || !email) {
+        return;
+      }
+
+      const follow = upsertLocalFollow({
+        email,
+        league: league.id,
+        leagueName: league.name,
+        team: teamName,
+        preferences
+      });
+      follow.preferences = normalizePreferences(preferences);
+      saveSubscriptions();
+
+      try {
+        const response = await fetch('/api/update-preferences', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email,
+            league: league.id,
+            team: teamName,
+            preferences: follow.preferences
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Preference update failed');
+        }
+        showToast(`${teamName} preferences saved.`);
+      } catch (error) {
+        showToast(`Local preferences saved, but server update failed: ${error.message}`);
+      }
+    }
+
+    async function unfollowTeam(league, teamName, email = currentEmail, stayOnMyTeams = false) {
+      if (!league) {
+        showToast('This saved follow is missing its league.');
+        return;
+      }
+
+      const subscription = subscriptionFor(league, teamName);
+      const followEmail = email || subscription?.email;
+      if (!followEmail) {
+        showToast('No saved follow was found for this team.');
+        return;
+      }
+
+      removeLocalFollow(followEmail, league.id, teamName);
+      showToast(`Removed ${teamName} locally.`);
+
+      try {
+        const response = await fetch('/api/unfollow-team', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: followEmail,
+            league: league.id,
+            team: teamName
+          })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Unfollow failed');
+        }
+        showToast(`${teamName} unfollowed.`);
+      } catch (error) {
+        showToast(`Local unfollow saved, but server failed: ${error.message}`);
+      }
+
+      if (stayOnMyTeams || view === 'my-teams') {
+        renderMyTeams();
+      } else {
+        renderDetail(league, teamName, false);
+      }
+    }
+
+    function renderSearchResults(query) {
+      view = 'search';
+      activeLeague = null;
+      activeTeam = null;
+      const matches = allTeamEntries().filter(({ league, team }) => (
+        team.toLowerCase().includes(query)
+        || league.name.toLowerCase().includes(query)
+        || league.fullName.toLowerCase().includes(query)
+      ));
+      setHeader('Search', 'Team Search', query ? `${matches.length} matches for "${query}".` : 'Start typing to search every league.');
+      content.innerHTML = '';
+
+      if (!query) {
+        renderLeagues();
+        return;
+      }
+
+      const grid = document.createElement('section');
+      grid.className = 'grid';
+      matches.forEach(({ league, team }) => {
+        const stats = buildStats(league, team);
+        const colors = teamColors(team);
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'card';
+        card.addEventListener('click', () => {
+          globalSearch.value = '';
+          renderDetail(league, team);
+        });
+        card.innerHTML = `
+          <div>
+            <span class="emoji" style="color:${colors[0]}">${teamInitials(team)}</span>
+            <span class="card-title">${team}</span>
+            <span class="card-copy">${league.name} | ${stats.record} season | ${stats.nextGame}</span>
+          </div>
+          <div class="chips">
+            <span class="chip" style="--chip-color:${league.color}">${league.sport}</span>
+            <span class="chip" style="--chip-color:${colors[1]}">${isFollowing(league, team) ? 'following' : 'open'}</span>
+          </div>
+        `;
+        grid.append(card);
+      });
+
+      if (!matches.length) {
+        content.innerHTML = '<p class="sub">No teams matched that search.</p>';
+        return;
+      }
+
+      content.append(grid);
+    }
+
+    async function runRecapsNow() {
+      const secret = window.prompt('Enter your CRON_SECRET to run final-score emails now:');
+      if (!secret) {
+        return;
+      }
+
+      showToast('Running recap checker...');
+      try {
+        const response = await fetch(`/api/run-recaps-now?secret=${encodeURIComponent(secret)}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Recap run failed');
+        }
+        showToast(`Recap run complete: ${data.sent || 0} sent, ${data.skipped || 0} skipped, ${data.errors || 0} errors.`);
+      } catch (error) {
+        showToast(`Recap run failed: ${error.message}`);
+      }
+    }
+
     function showToast(message) {
       clearTimeout(toastTimer);
       toast.textContent = message;
@@ -1397,6 +1843,9 @@
     backButton.addEventListener('click', () => {
       if (view === 'detail') {
         renderTeams(activeLeague);
+      } else if (view === 'my-teams' || view === 'search') {
+        globalSearch.value = '';
+        renderLeagues();
       } else {
         renderLeagues();
       }
@@ -1408,10 +1857,26 @@
       }
     });
 
+    globalSearch.addEventListener('input', () => {
+      const query = globalSearch.value.trim().toLowerCase();
+      if (query) {
+        renderSearchResults(query);
+      } else if (view === 'search') {
+        renderLeagues();
+      }
+    });
+
+    myTeamsButton.addEventListener('click', renderMyTeams);
+    runRecapsButton.addEventListener('click', runRecapsNow);
+
     followForm.addEventListener('submit', (event) => {
       event.preventDefault();
       if (pendingFollowTeam) {
-        saveFollow(pendingFollowTeam.league, pendingFollowTeam.teamName, emailInput.value.trim());
+        saveFollow(pendingFollowTeam.league, pendingFollowTeam.teamName, emailInput.value.trim(), {
+          finalScore: prefFinal.checked,
+          reminders: prefReminder.checked,
+          testEmails: prefTest.checked
+        });
       }
       closeFollow();
     });

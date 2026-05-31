@@ -150,12 +150,13 @@ Sports Central automatic final-score recap.`
 }
 
 export default async function handler(request, response) {
-  if (process.env.CRON_SECRET && request.headers.authorization !== `Bearer ${process.env.CRON_SECRET}`) {
+  const providedSecret = request.headers.authorization?.replace(/^Bearer\s+/i, '') || request.query.secret;
+  if (process.env.CRON_SECRET && providedSecret !== process.env.CRON_SECRET) {
     return json(response, 401, { error: 'Unauthorized' });
   }
 
   try {
-    const follows = await supabaseFetch('follows?select=email,league,league_name,team,team_id,created_at');
+    const follows = await supabaseFetch('follows?select=*');
     const followsByLeague = (follows || []).reduce((groups, follow) => {
       groups[follow.league] ||= [];
       groups[follow.league].push(follow);
@@ -179,6 +180,11 @@ export default async function handler(request, response) {
           : await fetchEspnRecentFinals(config);
 
         for (const follow of leagueFollows) {
+          if (follow.final_score_emails === false) {
+            skipped += 1;
+            continue;
+          }
+
           for (const game of games) {
             const isFinal = config.provider === 'mlb'
               ? isMlbFinalForFollow(game, follow)
