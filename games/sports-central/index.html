@@ -379,6 +379,34 @@
       align-content: center;
     }
 
+    .analytics-layout {
+      display: grid;
+      gap: 18px;
+    }
+
+    .analytics-section {
+      display: grid;
+      gap: 12px;
+    }
+
+    .analytics-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .analytics-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 2px solid rgba(255, 255, 255, 0.58);
+      border-radius: 8px;
+      background: rgba(232, 247, 252, 0.72);
+      color: var(--muted);
+      font-weight: 800;
+    }
+
     .hidden {
       display: none;
     }
@@ -741,6 +769,10 @@
     }
 
     function trackEvent(eventType, details = {}) {
+      if (localStorage.getItem('sports-central-owner-mode') === 'true') {
+        return;
+      }
+
       fetch('/api/track-event', {
         method: 'POST',
         headers: {
@@ -755,6 +787,48 @@
           ...details
         })
       }).catch(() => {});
+    }
+
+    function promptSecret(title) {
+      return new Promise((resolve) => {
+        const backdrop = document.createElement('div');
+        backdrop.className = 'modal-backdrop visible';
+        backdrop.innerHTML = `
+          <form class="modal">
+            <div class="title-wrap">
+              <div class="kicker">Private access</div>
+              <h3>${title}</h3>
+              <p class="sub">Enter your CRON_SECRET. It will be hidden while you type.</p>
+            </div>
+            <input type="password" autocomplete="current-password" placeholder="CRON_SECRET" required>
+            <div class="modal-actions">
+              <button class="plain-button cancel-secret" type="button">Cancel</button>
+              <button class="primary-button" type="submit">Continue</button>
+            </div>
+          </form>
+        `;
+        const form = backdrop.querySelector('form');
+        const input = backdrop.querySelector('input');
+
+        function close(value = '') {
+          backdrop.remove();
+          resolve(value);
+        }
+
+        form.addEventListener('submit', (event) => {
+          event.preventDefault();
+          close(input.value.trim());
+        });
+        backdrop.querySelector('.cancel-secret').addEventListener('click', () => close(''));
+        backdrop.addEventListener('click', (event) => {
+          if (event.target === backdrop) {
+            close('');
+          }
+        });
+
+        document.body.append(backdrop);
+        input.focus();
+      });
     }
 
     function defaultPreferences() {
@@ -1873,7 +1947,7 @@
     }
 
     async function runRecapsNow() {
-      const secret = window.prompt('Enter your CRON_SECRET to run final-score emails now:');
+      const secret = await promptSecret('Run Recaps Now');
       if (!secret) {
         return;
       }
@@ -1893,21 +1967,27 @@
     }
 
     async function showAnalytics() {
-      const secret = window.prompt('Enter your CRON_SECRET to view private analytics:');
+      const secret = await promptSecret('View Analytics');
       if (!secret) {
         return;
       }
 
       view = 'analytics';
-      setHeader('Private report', 'Analytics', 'Loading app analytics...');
+      setHeader('Private report', 'Analytics', 'Loading app analytics. Your current browser and saved email are excluded from the report.');
       content.innerHTML = '<div class="card loading-card"><span class="card-title">Loading analytics</span><span class="card-copy">Checking visits, follows, teams, and email activity.</span></div>';
 
       try {
-        const response = await fetch(`/api/analytics-report?secret=${encodeURIComponent(secret)}`);
+        const params = new URLSearchParams({
+          secret,
+          excludeVisitorId: visitorId,
+          excludeEmail: currentEmail
+        });
+        const response = await fetch(`/api/analytics-report?${params.toString()}`);
         const data = await response.json();
         if (!response.ok) {
           throw new Error(data.error || 'Analytics report failed');
         }
+        localStorage.setItem('sports-central-owner-mode', 'true');
 
         const metricCards = [
           ['Page Views', data.totals.pageViews],
@@ -1921,36 +2001,43 @@
         ];
 
         const listMarkup = (title, rows) => `
-          <div class="matchup">
+          <div class="matchup analytics-section">
             <h3>${title}</h3>
-            ${(rows || []).length
-              ? rows.map((row) => `<p class="sub">${row.name}: ${row.count}</p>`).join('')
-              : '<p class="sub">No data yet.</p>'}
+            <div class="analytics-list">
+              ${(rows || []).length
+                ? rows.map((row) => `<div class="analytics-row"><span>${row.name}</span><strong>${row.count}</strong></div>`).join('')
+                : '<p class="sub">No data yet.</p>'}
+            </div>
           </div>
         `;
 
         content.innerHTML = `
-          <section class="stats-panel">
+          <section class="stats-panel analytics-layout">
+            <div class="matchup">
+              <h3>Overview</h3>
+              <p class="sub">This report excludes this browser and ${currentEmail || 'your saved email once you enter one'}.</p>
+              <p class="sub">Generated ${new Date(data.generatedAt).toLocaleString()}</p>
+            </div>
             <div class="stat-grid">
               ${metricCards.map(([label, value]) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`).join('')}
             </div>
-            <div class="matchup">
-              <h3>Report Time</h3>
-              <p class="sub">${new Date(data.generatedAt).toLocaleString()}</p>
-            </div>
             ${listMarkup('Top Pages', data.topPages)}
-            ${listMarkup('Top Leagues', data.topLeagues)}
-            ${listMarkup('Top Teams', data.topTeams)}
-            ${listMarkup('Event Types', data.eventTypes)}
-            <div class="matchup">
+            <div class="grid">
+              ${listMarkup('Top Leagues', data.topLeagues)}
+              ${listMarkup('Top Teams', data.topTeams)}
+              ${listMarkup('Event Types', data.eventTypes)}
+            </div>
+            <div class="matchup analytics-section">
               <h3>Recent Events</h3>
-              ${(data.recentEvents || []).length
-                ? data.recentEvents.map((event) => `<p class="sub">${new Date(event.createdAt).toLocaleString()} | ${event.eventType}${event.league ? ` | ${event.league}` : ''}${event.team ? ` | ${event.team}` : ''}</p>`).join('')
-                : '<p class="sub">No recent events yet.</p>'}
+              <div class="analytics-list">
+                ${(data.recentEvents || []).length
+                  ? data.recentEvents.map((event) => `<div class="analytics-row"><span>${event.eventType}${event.league ? ` | ${event.league}` : ''}${event.team ? ` | ${event.team}` : ''}</span><strong>${new Date(event.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</strong></div>`).join('')
+                  : '<p class="sub">No recent events yet.</p>'}
+              </div>
             </div>
           </section>
         `;
-        setHeader('Private report', 'Analytics', `Generated ${new Date(data.generatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`);
+        setHeader('Private report', 'Analytics', `Generated ${new Date(data.generatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}. Your own visits are excluded.`);
       } catch (error) {
         content.innerHTML = `<p class="sub">Analytics failed: ${error.message}</p>`;
         showToast(`Analytics failed: ${error.message}`);

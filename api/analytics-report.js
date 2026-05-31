@@ -24,6 +24,21 @@ function uniqueCount(rows, key) {
   return new Set(rows.map((row) => row[key]).filter(Boolean)).size;
 }
 
+function excluded(rows, request) {
+  const visitorId = String(request.query.excludeVisitorId || '');
+  const email = String(request.query.excludeEmail || '').toLowerCase();
+
+  return rows.filter((row) => {
+    if (visitorId && row.visitor_id === visitorId) {
+      return false;
+    }
+    if (email && String(row.email || '').toLowerCase() === email) {
+      return false;
+    }
+    return true;
+  });
+}
+
 function since(rows, days) {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
   return rows.filter((row) => new Date(row.created_at).getTime() >= cutoff);
@@ -47,9 +62,9 @@ export default async function handler(request, response) {
   }
 
   try {
-    const events = await safeFetch('app_analytics?select=*&order=created_at.desc&limit=10000');
-    const follows = await safeFetch('follows?select=email,league,team,created_at');
-    const sentAlerts = await safeFetch('sent_game_alerts?select=email,team,game_pk,sent_at&order=sent_at.desc&limit=10000');
+    const events = excluded(await safeFetch('app_analytics?select=*&order=created_at.desc&limit=10000'), request);
+    const follows = excluded(await safeFetch('follows?select=email,league,team,created_at'), request);
+    const sentAlerts = excluded(await safeFetch('sent_game_alerts?select=email,team,game_pk,sent_at&order=sent_at.desc&limit=10000'), request);
     const lastDay = since(events, 1);
     const lastWeek = since(events, 7);
     const pageViews = events.filter((row) => row.event_type === 'page_view');
