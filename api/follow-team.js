@@ -1,4 +1,4 @@
-import { json, mlbTeamIds, supabaseFetch } from './_shared.js';
+import { findEspnTeamId, json, leagueConfigs, mlbTeamIds, supabaseFetch } from './_shared.js';
 
 export default async function handler(request, response) {
   if (request.method !== 'POST') {
@@ -11,13 +11,17 @@ export default async function handler(request, response) {
     return json(response, 400, { error: 'Missing email, league, or team' });
   }
 
-  if (league !== 'mlb') {
-    return json(response, 400, { error: 'Automatic emails are currently available for MLB teams only' });
+  const config = leagueConfigs[league];
+  if (!config) {
+    return json(response, 400, { error: 'Automatic emails are not available for that league yet' });
   }
 
-  const teamId = mlbTeamIds[team];
+  const teamId = config.provider === 'mlb'
+    ? mlbTeamIds[team]
+    : await findEspnTeamId(config, team);
+
   if (!teamId) {
-    return json(response, 400, { error: 'Unknown MLB team' });
+    return json(response, 400, { error: `Unknown ${config.name} team` });
   }
 
   try {
@@ -29,7 +33,7 @@ export default async function handler(request, response) {
       body: JSON.stringify({
         email,
         league,
-        league_name: leagueName || 'MLB',
+        league_name: leagueName || config.name,
         team,
         team_id: teamId
       })

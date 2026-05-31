@@ -31,6 +31,43 @@ export const mlbTeamIds = {
   'Washington Nationals': 120
 };
 
+export const leagueConfigs = {
+  mlb: {
+    name: 'MLB',
+    provider: 'mlb'
+  },
+  nfl: {
+    name: 'NFL',
+    provider: 'espn',
+    espnSport: 'football',
+    espnLeague: 'nfl'
+  },
+  nba: {
+    name: 'NBA',
+    provider: 'espn',
+    espnSport: 'basketball',
+    espnLeague: 'nba'
+  },
+  nhl: {
+    name: 'NHL',
+    provider: 'espn',
+    espnSport: 'hockey',
+    espnLeague: 'nhl'
+  },
+  mls: {
+    name: 'MLS',
+    provider: 'espn',
+    espnSport: 'soccer',
+    espnLeague: 'usa.1'
+  },
+  wnba: {
+    name: 'WNBA',
+    provider: 'espn',
+    espnSport: 'basketball',
+    espnLeague: 'wnba'
+  }
+};
+
 export function json(response, status, body) {
   response.status(status).json(body);
 }
@@ -124,4 +161,49 @@ export async function sendGmail({ to, subject, text }) {
   }
 
   return data;
+}
+
+export function dateStringCompact(date) {
+  return date.toISOString().slice(0, 10).replace(/-/g, '');
+}
+
+export function namesMatch(left, right) {
+  return String(left || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '') === String(right || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+}
+
+export async function fetchEspnScoreboard(config, date) {
+  const url = new URL(`https://site.api.espn.com/apis/site/v2/sports/${config.espnSport}/${config.espnLeague}/scoreboard`);
+  url.searchParams.set('dates', dateStringCompact(date));
+  url.searchParams.set('limit', '500');
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(`${config.name} scoreboard request failed`);
+  }
+
+  return data.events || [];
+}
+
+export async function findEspnTeamId(config, teamName) {
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${config.espnSport}/${config.espnLeague}/teams`;
+  const response = await fetch(url);
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(`${config.name} teams request failed`);
+  }
+
+  const teams = data.sports?.[0]?.leagues?.[0]?.teams || [];
+  const match = teams.find((entry) => {
+    const team = entry.team || entry;
+    return [team.displayName, team.name, team.shortDisplayName, team.location]
+      .some((candidate) => namesMatch(candidate, teamName));
+  });
+
+  return match ? Number((match.team || match).id) : 0;
 }

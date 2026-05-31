@@ -1006,7 +1006,7 @@
         <div class="matchup">
           <h3>Followed Teams</h3>
           <div class="follow-list" id="followList"></div>
-          <p class="sub">MLB follows are saved to the server for automatic final-score emails. Other leagues stay local until live APIs are added.</p>
+          <p class="sub">Follows are saved to the server for automatic final-score emails. On the free Vercel plan, the checker runs once per day.</p>
         </div>
       `;
 
@@ -1069,7 +1069,7 @@
       }
       saveSubscriptions();
 
-      if (league.id === 'mlb') {
+      if (['mlb', 'nfl', 'nba', 'nhl', 'mls', 'wnba'].includes(league.id)) {
         showToast('Saving automatic email follow...');
         try {
           const followResponse = await fetch('/api/follow-team', {
