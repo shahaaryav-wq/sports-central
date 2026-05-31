@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/send-game-recaps",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 9 * * *"
     }
   ]
 }
