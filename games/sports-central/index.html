@@ -516,6 +516,7 @@
         <input class="search" id="globalSearch" type="search" placeholder="Search all teams">
         <input class="search hidden" id="search" type="search" placeholder="Search teams">
         <button class="plain-button" id="myTeamsButton" type="button">My Teams</button>
+        <button class="plain-button" id="analyticsButton" type="button">Analytics</button>
         <button class="plain-button" id="runRecapsButton" type="button">Recap Now</button>
       </div>
     </header>
@@ -632,6 +633,7 @@
     const globalSearch = document.getElementById('globalSearch');
     const search = document.getElementById('search');
     const myTeamsButton = document.getElementById('myTeamsButton');
+    const analyticsButton = document.getElementById('analyticsButton');
     const runRecapsButton = document.getElementById('runRecapsButton');
     const modalBackdrop = document.getElementById('modalBackdrop');
     const followForm = document.getElementById('followForm');
@@ -658,6 +660,8 @@
     const leagueLastUpdated = {};
     const subscriptions = loadSubscriptions();
     let currentEmail = localStorage.getItem('sports-central-email') || '';
+    const visitorId = getOrCreateId('sports-central-visitor-id');
+    const sessionId = getOrCreateSessionId();
     const mlbTeamIds = {
       'Arizona Diamondbacks': 109,
       Athletics: 133,
@@ -716,6 +720,41 @@
 
     function saveSubscriptions() {
       localStorage.setItem('sports-central-follows', JSON.stringify(subscriptions));
+    }
+
+    function getOrCreateId(key) {
+      let value = localStorage.getItem(key);
+      if (!value) {
+        value = window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        localStorage.setItem(key, value);
+      }
+      return value;
+    }
+
+    function getOrCreateSessionId() {
+      let value = sessionStorage.getItem('sports-central-session-id');
+      if (!value) {
+        value = window.crypto?.randomUUID ? window.crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        sessionStorage.setItem('sports-central-session-id', value);
+      }
+      return value;
+    }
+
+    function trackEvent(eventType, details = {}) {
+      fetch('/api/track-event', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          eventType,
+          visitorId,
+          sessionId,
+          page: location.pathname,
+          referrer: document.referrer,
+          ...details
+        })
+      }).catch(() => {});
     }
 
     function defaultPreferences() {
@@ -1270,6 +1309,11 @@
       activeLeague = league;
       activeTeam = null;
       localStorage.setItem('sports-central-last-league', league.id);
+      if (requestLiveUpdate) {
+        trackEvent('league_open', {
+          league: league.id
+        });
+      }
       const query = search.value.trim().toLowerCase();
       const teams = league.teams.filter((team) => team.toLowerCase().includes(query));
       const liveNote = league.id === 'mlb'
@@ -1340,6 +1384,12 @@
       view = 'detail';
       activeLeague = league;
       activeTeam = teamName;
+      if (requestLiveUpdate) {
+        trackEvent('team_open', {
+          league: league.id,
+          team: teamName
+        });
+      }
       const stats = buildStats(league, teamName);
       const colors = teamColors(teamName);
       const followed = isFollowing(league, teamName);
@@ -1510,6 +1560,10 @@
           if (!followResponse.ok) {
             throw new Error(data.error || 'Follow save failed');
           }
+          trackEvent('follow_saved', {
+            league: league.id,
+            team: teamName
+          });
           showToast(`${teamName} automatic final-score emails saved for ${email}.`);
         } catch (error) {
           showToast(`Local follow saved, but server follow failed: ${error.message}`);
@@ -1559,6 +1613,10 @@
         }
 
         showToast(`Test email sent to ${subscription.email}.`);
+        trackEvent('test_email_sent', {
+          league: league.id,
+          team: teamName
+        });
       } catch (error) {
         showToast(`Email failed: ${error.message}`);
       }
@@ -1820,6 +1878,7 @@
         return;
       }
 
+      trackEvent('recap_run_clicked');
       showToast('Running recap checker...');
       try {
         const response = await fetch(`/api/run-recaps-now?secret=${encodeURIComponent(secret)}`);
@@ -1830,6 +1889,71 @@
         showToast(`Recap run complete: ${data.sent || 0} sent, ${data.skipped || 0} skipped, ${data.errors || 0} errors.`);
       } catch (error) {
         showToast(`Recap run failed: ${error.message}`);
+      }
+    }
+
+    async function showAnalytics() {
+      const secret = window.prompt('Enter your CRON_SECRET to view private analytics:');
+      if (!secret) {
+        return;
+      }
+
+      view = 'analytics';
+      setHeader('Private report', 'Analytics', 'Loading app analytics...');
+      content.innerHTML = '<div class="card loading-card"><span class="card-title">Loading analytics</span><span class="card-copy">Checking visits, follows, teams, and email activity.</span></div>';
+
+      try {
+        const response = await fetch(`/api/analytics-report?secret=${encodeURIComponent(secret)}`);
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || 'Analytics report failed');
+        }
+
+        const metricCards = [
+          ['Page Views', data.totals.pageViews],
+          ['Unique Visitors', data.totals.uniqueVisitors],
+          ['Sessions', data.totals.sessions],
+          ['Events Today', data.totals.eventsToday],
+          ['Events Last 7 Days', data.totals.eventsLast7Days],
+          ['Saved Follows', data.totals.follows],
+          ['Followed Emails', data.totals.followedEmails],
+          ['Final Emails Sent', data.totals.finalScoreEmailsSent]
+        ];
+
+        const listMarkup = (title, rows) => `
+          <div class="matchup">
+            <h3>${title}</h3>
+            ${(rows || []).length
+              ? rows.map((row) => `<p class="sub">${row.name}: ${row.count}</p>`).join('')
+              : '<p class="sub">No data yet.</p>'}
+          </div>
+        `;
+
+        content.innerHTML = `
+          <section class="stats-panel">
+            <div class="stat-grid">
+              ${metricCards.map(([label, value]) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`).join('')}
+            </div>
+            <div class="matchup">
+              <h3>Report Time</h3>
+              <p class="sub">${new Date(data.generatedAt).toLocaleString()}</p>
+            </div>
+            ${listMarkup('Top Pages', data.topPages)}
+            ${listMarkup('Top Leagues', data.topLeagues)}
+            ${listMarkup('Top Teams', data.topTeams)}
+            ${listMarkup('Event Types', data.eventTypes)}
+            <div class="matchup">
+              <h3>Recent Events</h3>
+              ${(data.recentEvents || []).length
+                ? data.recentEvents.map((event) => `<p class="sub">${new Date(event.createdAt).toLocaleString()} | ${event.eventType}${event.league ? ` | ${event.league}` : ''}${event.team ? ` | ${event.team}` : ''}</p>`).join('')
+                : '<p class="sub">No recent events yet.</p>'}
+            </div>
+          </section>
+        `;
+        setHeader('Private report', 'Analytics', `Generated ${new Date(data.generatedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.`);
+      } catch (error) {
+        content.innerHTML = `<p class="sub">Analytics failed: ${error.message}</p>`;
+        showToast(`Analytics failed: ${error.message}`);
       }
     }
 
@@ -1867,6 +1991,7 @@
     });
 
     myTeamsButton.addEventListener('click', renderMyTeams);
+    analyticsButton.addEventListener('click', showAnalytics);
     runRecapsButton.addEventListener('click', runRecapsNow);
 
     followForm.addEventListener('submit', (event) => {
@@ -1890,6 +2015,7 @@
     });
 
     startLiveRefresh();
+    trackEvent('page_view');
     renderLeagues();
   </script>
 </body>
